@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
+<title>Fitness Dashboard</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- LOGIN GATE -->
+  <section id="loginView" class="login-view">
+    <div class="login-card">
+      <h1 class="brand">Fitness Dashboard</h1>
+      <p class="muted">Sign in to view your data.</p>
+      <input id="loginEmail" type="email" placeholder="Email" autocomplete="username" />
+      <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="loginBtn" class="btn primary block">Sign in</button>
+      <p id="loginError" class="error-text" hidden></p>
+    </div>
+  </section>
+
+  <!-- SET/RESET PASSWORD (shown when arriving via a Supabase recovery link) -->
+  <section id="recoveryView" class="login-view" hidden>
+    <div class="login-card">
+      <h1 class="brand">Set your password</h1>
+      <p class="muted">Choose a password for the dashboard.</p>
+      <input id="recoveryPassword" type="password" placeholder="New password" autocomplete="new-password" />
+      <input id="recoveryPassword2" type="password" placeholder="Confirm new password" autocomplete="new-password" />
+      <button id="recoveryBtn" class="btn primary block">Set password</button>
+      <p id="recoveryError" class="error-text" hidden></p>
+    </div>
+  </section>
+
+  <!-- MAIN DASHBOARD -->
+  <div id="mainView" hidden>
+    <header class="topbar">
+      <h1 class="brand">Fitness Dashboard</h1>
+      <div class="topbar-actions">
+        <select id="rangeSelect">
+          <option value="30">Last 30 days</option>
+          <option value="90" selected>Last 90 days</option>
+          <option value="180">Last 6 months</option>
+          <option value="365">Last year</option>
+        </select>
+        <button id="importBtn" class="icon-btn" aria-label="Import FitLog backup" title="Import FitLog backup">⬆</button>
+        <button id="signOutBtn" class="icon-btn" aria-label="Sign out" title="Sign out">⏻</button>
+      </div>
+    </header>
+
+    <main id="content">
+
+      <section class="stat-row" id="statRow"></section>
+
+      <section class="chart-section">
+        <h2>Consistency</h2>
+        <div class="chart-card">
+          <div id="heatmap" class="heatmap"></div>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <h2>Resting Heart Rate</h2>
+        <div class="chart-card">
+          <svg id="chartRhr" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <h2>Body Battery</h2>
+        <div class="chart-card">
+          <svg id="chartBattery" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <h2>Stress</h2>
+        <div class="chart-card">
+          <svg id="chartStress" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <h2>Steps</h2>
+        <div class="chart-card">
+          <svg id="chartSteps" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <h2>Sleep Duration</h2>
+        <div class="chart-card">
+          <svg id="chartSleep" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <h2>Strength Volume (sets/week)</h2>
+        <div class="chart-card">
+          <svg id="chartStrength" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </section>
+
+      <section class="chart-section">
+        <h2>Cardio Distance/Week</h2>
+        <div class="chart-card">
+          <svg id="chartCardio" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </section>
+
+      <p class="muted small footer-note">Last synced: <span id="lastSynced">—</span></p>
+
+    </main>
+  </div>
+
+  <!-- IMPORT MODAL -->
+  <div id="importModal" class="modal-overlay" hidden>
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Import FitLog Backup</h3>
+        <button id="importClose" class="icon-btn small" aria-label="Close">✕</button>
+      </div>
+      <p class="muted small">In FitLog: Settings → Export backup. Then pick that file here.</p>
+      <input id="importFile" type="file" accept="application/json" />
+      <p id="importStatus" class="muted small" role="status"></p>
+      <button id="importGoBtn" class="btn primary block">Import</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
