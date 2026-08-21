@@ -115,13 +115,15 @@ export function renderWorkoutsList(container, onOpen) {
   });
 }
 
-export function renderWorkoutDetail(container, id) {
+// onSaved(): called after a successful edit save or delete, so the caller
+// can refresh whatever list/stats/calendar is showing this workout.
+export function renderWorkoutDetail(container, id, onSaved) {
   const workout = cache.workouts.find((w) => w.id === id);
   if (!workout) return;
   const sets = cache.setsByWorkout.get(id) || [];
   const segments = cache.segmentsByWorkout.get(id) || [];
   const linkedActivity = cache.linkedActivityByWorkout.get(id) || null;
-  renderWorkoutDetailData(container, workout, sets, segments, linkedActivity);
+  renderWorkoutDetailData(container, workout, sets, segments, linkedActivity, { onSaved });
 }
 
 // Pure version of the above -- takes the workout + its children directly
@@ -130,7 +132,7 @@ export function renderWorkoutDetail(container, id) {
 // dashboard's date-range selector) can reuse the exact same rendering.
 // linkedActivity (optional): a garmin_activities row matched to this
 // workout via workout_links, shown as a corroborating metrics line.
-export function renderWorkoutDetailData(container, workout, sets, segments, linkedActivity = null) {
+export function renderWorkoutDetailData(container, workout, sets, segments, linkedActivity = null, opts = {}) {
   container.innerHTML = "";
 
   const dateLabel = new Date(workout.date).toLocaleDateString(undefined, {
@@ -143,6 +145,29 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
   header.className = "workout-detail-header";
   header.innerHTML = `<h4>${esc(workout.name || "Workout")}</h4><p class="muted small">${esc(dateLabel)}</p>`;
   container.appendChild(header);
+
+  const actions = document.createElement("div");
+  actions.className = "workout-detail-actions";
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "btn secondary small";
+  editBtn.textContent = "Edit";
+  editBtn.addEventListener("click", () => renderWorkoutEditForm(container, workout, sets, segments, linkedActivity, opts.onSaved));
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "btn ghost small";
+  deleteBtn.textContent = "Delete";
+  deleteBtn.addEventListener("click", async () => {
+    if (!confirm("Delete this workout? This can't be undone.")) return;
+    try {
+      await deleteWorkoutRow(workout.id);
+      if (opts.onSaved) opts.onSaved();
+    } catch (e) {
+      alert(`Couldn't delete: ${e.message}`);
+    }
+  });
+  actions.append(editBtn, deleteBtn);
+  container.appendChild(actions);
 
   if (linkedActivity) {
     const bits = [];
@@ -208,6 +233,288 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
     block.innerHTML = `<div class="exercise-name">${esc(name)}</div>${rowsHtml}`;
     container.appendChild(block);
   });
+}
+
+// ---------- Editing ----------
+async function saveWorkoutEdits(workout, state) {
+  const { error: wErr } = await supabase.from("fitlog_workouts").update({ name: state.name, date: state.date }).eq("id", workout.id);
+  if (wErr) throw wErr;
+
+  if (workout.type === "cardio") {
+    const { error: delErr } = await supabase.from("fitlog_cardio_segments").delete().eq("workout_id", workout.id);
+    if (delErr) throw delErr;
+    const rows = state.segments.map((seg) => ({
+      workout_id: workout.id,
+      activity_type: seg.activityType,
+      duration_min: seg.durationMin,
+      distance: seg.distance,
+      calories: seg.calories,
+      avg_hr: seg.avgHr,
+      max_hr: seg.maxHr,
+    }));
+    if (rows.length) {
+      const { error } = await supabase.from("fitlog_cardio_segments").insert(rows);
+      if (error) throw error;
+    }
+  } else {
+    const { error: delErr } = await supabase.from("fitlog_sets").delete().eq("workout_id", workout.id);
+    if (delErr) throw delErr;
+    const rows = [];
+    state.exercises.forEach((ex) => {
+      ex.sets.forEach((s, i) => {
+        rows.push({
+          workout_id: workout.id,
+          exercise_name: ex.name,
+          set_index: i,
+          reps: s.reps,
+          weight: s.weight,
+          rpe: s.rpe,
+          is_warmup: !!s.isWarmup,
+          done: true,
+        });
+      });
+    });
+    if (rows.length) {
+      const { error } = await supabase.from("fitlog_sets").insert(rows);
+      if (error) throw error;
+    }
+  }
+}
+
+async function deleteWorkoutRow(workoutId) {
+  // fitlog_sets / fitlog_cardio_segments cascade-delete via their FK (see schema/001_init.sql).
+  const { error } = await supabase.from("fitlog_workouts").delete().eq("id", workoutId);
+  if (error) throw error;
+}
+
+function toDatetimeLocal(isoString) {
+  const d = new Date(isoString);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function numOrNull(v) {
+  if (v === "" || v == null) return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+function renderWorkoutEditForm(container, workout, sets, segments, linkedActivity, onSaved) {
+  container.innerHTML = "";
+
+  const state = { name: workout.name || "", date: workout.date, exercises: [], segments: [] };
+
+  if (workout.type === "cardio") {
+    state.segments = segments.map((seg) => ({
+      activityType: seg.activity_type || "",
+      durationMin: seg.duration_min,
+      distance: seg.distance,
+      calories: seg.calories,
+      avgHr: seg.avg_hr,
+      maxHr: seg.max_hr,
+    }));
+  } else {
+    const order = [];
+    const byExercise = new Map();
+    sets.forEach((s) => {
+      if (!byExercise.has(s.exercise_name)) {
+        byExercise.set(s.exercise_name, []);
+        order.push(s.exercise_name);
+      }
+      byExercise.get(s.exercise_name).push(s);
+    });
+    state.exercises = order.map((name) => ({
+      name,
+      sets: [...byExercise.get(name)]
+        .sort((a, b) => a.set_index - b.set_index)
+        .map((s) => ({ reps: s.reps, weight: s.weight, rpe: s.rpe, isWarmup: !!s.is_warmup })),
+    }));
+  }
+
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>Edit workout</h4>`;
+  container.appendChild(header);
+
+  const nameField = document.createElement("div");
+  nameField.className = "edit-field";
+  nameField.innerHTML = `<label>Name</label><input type="text" value="${esc(state.name)}" />`;
+  nameField.querySelector("input").addEventListener("input", (e) => (state.name = e.target.value));
+  container.appendChild(nameField);
+
+  const dateField = document.createElement("div");
+  dateField.className = "edit-field";
+  dateField.innerHTML = `<label>Date &amp; time</label><input type="datetime-local" value="${toDatetimeLocal(state.date)}" />`;
+  dateField.querySelector("input").addEventListener("input", (e) => {
+    if (e.target.value) state.date = new Date(e.target.value).toISOString();
+  });
+  container.appendChild(dateField);
+
+  const body = document.createElement("div");
+  body.className = "workout-detail-body";
+  container.appendChild(body);
+
+  function renderBody() {
+    body.innerHTML = "";
+    if (workout.type === "cardio") renderSegments();
+    else renderExercises();
+  }
+
+  function renderExercises() {
+    state.exercises.forEach((ex, exIdx) => {
+      const block = document.createElement("div");
+      block.className = "exercise-block";
+
+      const exHeader = document.createElement("div");
+      exHeader.className = "edit-exercise-header";
+      exHeader.innerHTML = `<span class="exercise-name">${esc(ex.name)}</span>`;
+      const removeExBtn = document.createElement("button");
+      removeExBtn.type = "button";
+      removeExBtn.className = "icon-btn small";
+      removeExBtn.setAttribute("aria-label", "Remove exercise");
+      removeExBtn.textContent = "✕";
+      removeExBtn.addEventListener("click", () => {
+        state.exercises.splice(exIdx, 1);
+        renderBody();
+      });
+      exHeader.appendChild(removeExBtn);
+      block.appendChild(exHeader);
+
+      ex.sets.forEach((s, setIdx) => {
+        const row = document.createElement("div");
+        row.className = "edit-set-row";
+        row.innerHTML = `
+          <span class="set-marker">${setIdx + 1}</span>
+          <input type="number" step="any" placeholder="lb" value="${s.weight ?? ""}" />
+          <input type="number" step="any" placeholder="reps" value="${s.reps ?? ""}" />
+          <input type="number" step="any" placeholder="RPE" value="${s.rpe ?? ""}" />
+          <label class="warmup-toggle"><input type="checkbox" ${s.isWarmup ? "checked" : ""} /> W</label>
+        `;
+        const [weightInput, repsInput, rpeInput] = row.querySelectorAll('input[type="number"]');
+        weightInput.addEventListener("input", (e) => (s.weight = numOrNull(e.target.value)));
+        repsInput.addEventListener("input", (e) => (s.reps = numOrNull(e.target.value)));
+        rpeInput.addEventListener("input", (e) => (s.rpe = numOrNull(e.target.value)));
+        row.querySelector('input[type="checkbox"]').addEventListener("change", (e) => (s.isWarmup = e.target.checked));
+
+        const removeSetBtn = document.createElement("button");
+        removeSetBtn.type = "button";
+        removeSetBtn.className = "icon-btn small";
+        removeSetBtn.setAttribute("aria-label", "Remove set");
+        removeSetBtn.textContent = "✕";
+        removeSetBtn.addEventListener("click", () => {
+          ex.sets.splice(setIdx, 1);
+          renderBody();
+        });
+        row.appendChild(removeSetBtn);
+        block.appendChild(row);
+      });
+
+      const addSetBtn = document.createElement("button");
+      addSetBtn.type = "button";
+      addSetBtn.className = "btn ghost small";
+      addSetBtn.textContent = "+ Add set";
+      addSetBtn.addEventListener("click", () => {
+        const last = ex.sets[ex.sets.length - 1];
+        ex.sets.push({ reps: last?.reps ?? null, weight: last?.weight ?? null, rpe: null, isWarmup: false });
+        renderBody();
+      });
+      block.appendChild(addSetBtn);
+
+      body.appendChild(block);
+    });
+
+    const addExRow = document.createElement("div");
+    addExRow.className = "edit-field";
+    addExRow.innerHTML = `<label>Add exercise (press Enter)</label><input type="text" placeholder="Exercise name…" />`;
+    const input = addExRow.querySelector("input");
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const name = input.value.trim();
+      if (!name) return;
+      state.exercises.push({ name, sets: [{ reps: null, weight: null, rpe: null, isWarmup: false }] });
+      renderBody();
+    });
+    body.appendChild(addExRow);
+  }
+
+  function renderSegments() {
+    state.segments.forEach((seg, idx) => {
+      const block = document.createElement("div");
+      block.className = "exercise-block";
+      block.innerHTML = `
+        <div class="edit-exercise-header"><span class="exercise-name">Segment ${idx + 1}</span></div>
+        <div class="edit-segment-grid">
+          <div class="edit-field wide"><label>Activity</label><input type="text" value="${esc(seg.activityType)}" /></div>
+          <div class="edit-field"><label>Duration (min)</label><input type="number" step="any" value="${seg.durationMin ?? ""}" /></div>
+          <div class="edit-field"><label>Distance (mi)</label><input type="number" step="any" value="${seg.distance ?? ""}" /></div>
+          <div class="edit-field"><label>Calories</label><input type="number" step="any" value="${seg.calories ?? ""}" /></div>
+          <div class="edit-field"><label>Avg HR</label><input type="number" step="any" value="${seg.avgHr ?? ""}" /></div>
+          <div class="edit-field"><label>Max HR</label><input type="number" step="any" value="${seg.maxHr ?? ""}" /></div>
+        </div>
+      `;
+      const [activityInput, durInput, distInput, calInput, avgInput, maxInput] = block.querySelectorAll("input");
+      activityInput.addEventListener("input", (e) => (seg.activityType = e.target.value));
+      durInput.addEventListener("input", (e) => (seg.durationMin = numOrNull(e.target.value)));
+      distInput.addEventListener("input", (e) => (seg.distance = numOrNull(e.target.value)));
+      calInput.addEventListener("input", (e) => (seg.calories = numOrNull(e.target.value)));
+      avgInput.addEventListener("input", (e) => (seg.avgHr = numOrNull(e.target.value)));
+      maxInput.addEventListener("input", (e) => (seg.maxHr = numOrNull(e.target.value)));
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "icon-btn small";
+      removeBtn.setAttribute("aria-label", "Remove segment");
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", () => {
+        state.segments.splice(idx, 1);
+        renderBody();
+      });
+      block.querySelector(".edit-exercise-header").appendChild(removeBtn);
+
+      body.appendChild(block);
+    });
+
+    const addSegBtn = document.createElement("button");
+    addSegBtn.type = "button";
+    addSegBtn.className = "btn ghost small";
+    addSegBtn.textContent = "+ Add segment";
+    addSegBtn.addEventListener("click", () => {
+      state.segments.push({ activityType: "", durationMin: null, distance: null, calories: null, avgHr: null, maxHr: null });
+      renderBody();
+    });
+    body.appendChild(addSegBtn);
+  }
+
+  renderBody();
+
+  const footer = document.createElement("div");
+  footer.className = "workout-detail-actions";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "btn primary small";
+  saveBtn.textContent = "Save";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "btn ghost small";
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", () => {
+    renderWorkoutDetailData(container, workout, sets, segments, linkedActivity, { onSaved });
+  });
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+    try {
+      await saveWorkoutEdits(workout, state);
+      if (onSaved) onSaved();
+    } catch (e) {
+      alert(`Couldn't save: ${e.message}`);
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save";
+    }
+  });
+  footer.append(saveBtn, cancelBtn);
+  container.appendChild(footer);
 }
 
 function emptyNote(text) {

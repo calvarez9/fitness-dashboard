@@ -12,7 +12,7 @@ import {
   computeExerciseStats,
   computeMovementMuscleStats,
 } from "./workouts.js";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel } from "./calendar.js";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -34,11 +34,19 @@ function currentRangeDays() {
 // -> sessions it was performed in -> click one -> the full workout, HR and all.
 let modalStack = [];
 
+async function onWorkoutSaved() {
+  closeModal();
+  toast("Saved ✓");
+  resetLinksCache();
+  await refreshWorkouts(currentRangeDays());
+  await refreshCalendar();
+}
+
 function renderModalTop() {
   const top = modalStack[modalStack.length - 1];
   $("#workoutModalBack").hidden = modalStack.length <= 1;
   const body = $("#workoutModalBody");
-  if (top.type === "workout") renderWorkoutDetail(body, top.payload);
+  if (top.type === "workout") renderWorkoutDetail(body, top.payload, onWorkoutSaved);
   else if (top.type === "exercise") renderExerciseDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "muscle") renderMuscleDetail(body, top.payload, (name) => pushModal("exercise", name));
@@ -108,15 +116,29 @@ async function refresh() {
 // ---------- Calendar ----------
 let calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
+async function onCalendarDaySaved(dateKey) {
+  resetLinksCache();
+  toast("Saved ✓");
+  await refreshWorkouts(currentRangeDays());
+  await renderCalendarAndGrid(dateKey);
+}
+
+async function openCalendarDay(dateKey, events) {
+  await renderDayDetail($("#calDayDetail"), dateKey, events, () => onCalendarDaySaved(dateKey));
+  $$(".cal-day", $("#calGrid")).forEach((el) => el.classList.toggle("selected", el.dataset.date === dateKey));
+}
+
+async function renderCalendarAndGrid(selectedDateKey) {
+  const { byDay } = await loadMonth(calMonth);
+  renderCalendarGrid($("#calGrid"), calMonth, byDay, openCalendarDay);
+  if (selectedDateKey) await openCalendarDay(selectedDateKey, byDay.get(selectedDateKey) || []);
+}
+
 async function refreshCalendar() {
   $("#calMonthLabel").textContent = monthLabel(calMonth);
   $("#calDayDetail").innerHTML = "";
   try {
-    const { byDay } = await loadMonth(calMonth);
-    renderCalendarGrid($("#calGrid"), calMonth, byDay, async (dateKey, events) => {
-      await renderDayDetail($("#calDayDetail"), dateKey, events);
-      $$(".cal-day", $("#calGrid")).forEach((el) => el.classList.toggle("selected", el.dataset.date === dateKey));
-    });
+    await renderCalendarAndGrid();
   } catch (e) {
     console.error(e);
     $("#calGrid").innerHTML = "";

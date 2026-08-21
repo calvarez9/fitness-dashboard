@@ -17,6 +17,12 @@ function endOfMonth(d) {
 
 let linksCache = null;
 
+// Call after an edit/delete that could change what's linked (or just to
+// pick up a fresh auto-relink run) so the next loadMonth() re-fetches.
+export function resetLinksCache() {
+  linksCache = null;
+}
+
 // workout_links may not exist yet (schema/005 not run) -- treat that as
 // "no links" rather than breaking the calendar.
 async function loadLinks() {
@@ -135,8 +141,11 @@ function eventSummary(ev) {
  * Renders full detail for every event on a day directly inline (no further
  * click needed) -- a day usually has at most a workout and maybe its
  * linked Garmin corroboration, so there's rarely anything to drill into.
+ * onSaved(): called after an edit/delete inside this view is saved, so the
+ * caller can reload the month (invalidates linksCache too, in case a
+ * linked activity's workout was deleted or its date changed).
  */
-export async function renderDayDetail(container, dateKey, events) {
+export async function renderDayDetail(container, dateKey, events, onSaved) {
   container.innerHTML = "";
 
   const label = new Date(`${dateKey}T12:00:00`).toLocaleDateString(undefined, {
@@ -180,7 +189,7 @@ export async function renderDayDetail(container, dateKey, events) {
       supabase.from("fitlog_sets").select("workout_id, exercise_name, set_index, reps, weight, rpe, is_warmup, done").eq("workout_id", w.id).order("set_index"),
       supabase.from("fitlog_cardio_segments").select("workout_id, activity_type, duration_min, distance, calories, avg_hr, max_hr").eq("workout_id", w.id),
     ]);
-    renderWorkoutDetailData(wrap, w, setsRes.data || [], segRes.data || [], ev.linkedActivity);
+    renderWorkoutDetailData(wrap, w, setsRes.data || [], segRes.data || [], ev.linkedActivity, { onSaved });
   }
 }
 
