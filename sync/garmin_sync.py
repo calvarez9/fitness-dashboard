@@ -185,13 +185,37 @@ def sync_activities(garmin, limit=20):
     return rows
 
 
+MIN_HOURS_BETWEEN_SYNCS = 11  # launchd checks in every 30 min; this makes it converge on ~2x/day
+
+
+def hours_since_last_sync():
+    """None if we've never synced (or the state row is missing) -> always due."""
+    url = f"{SUPABASE_URL}/rest/v1/sync_state?key=eq.last_sync_at&select=value"
+    r = requests.get(url, headers=HEADERS, timeout=15)
+    r.raise_for_status()
+    rows = r.json()
+    if not rows:
+        return None
+    last = dt.datetime.fromisoformat(rows[0]["value"])
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=dt.UTC)
+    return (dt.datetime.now(dt.UTC) - last).total_seconds() / 3600
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--backfill", type=int, default=0, help="Backfill N days of history instead of the usual incremental sync"
     )
     parser.add_argument("--activities-limit", type=int, default=20)
+    parser.add_argument("--force", action="store_true", help="Skip the 'not due yet' check (backfill always skips it too)")
     args = parser.parse_args()
+
+    if not args.backfill and not args.force:
+        hours = hours_since_last_sync()
+        if hours is not None and hours < MIN_HOURS_BETWEEN_SYNCS:
+            print(f"Last sync was {hours:.1f}h ago (< {MIN_HOURS_BETWEEN_SYNCS}h) — not due yet, skipping.")
+            return
 
     print("Logging in to Garmin Connect...")
     garmin = login()
