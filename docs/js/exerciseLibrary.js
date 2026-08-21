@@ -103,6 +103,8 @@ const EXTRA_EXERCISES = {
   "Dead Bug": { movement: "isolation", muscles: { abs: 1, obliques: 0.5 } },
   "Goblet Squat": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, adductors: 0.5, abs: 0.5 } },
   "Incline Bicep Curl": { movement: "isolation", muscles: { biceps: 1, forearms: 0.5 } },
+  "Narrow Push Up": { movement: "horizontalPush", muscles: { triceps: 1, chest: 0.5, frontDelts: 0.5 } },
+  "Overhead Tricep Extension": { movement: "isolation", muscles: { triceps: 1 } },
 };
 
 export const EMPTY_META = { movement: "isolation", muscles: {} };
@@ -128,6 +130,8 @@ const ALIASES = {
   "reverse lunge": "Walking Lunge",
   "seated shoulder press": "Dumbbell Shoulder Press",
   "single leg calf raise": "Calf Raise",
+  "push up": "Push-Up",
+  "standing shoulder press": "Dumbbell Shoulder Press",
 };
 
 /**

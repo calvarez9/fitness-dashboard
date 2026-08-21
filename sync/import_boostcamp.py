@@ -126,7 +126,19 @@ def main():
             )
 
             sets_for_this = []
+            # A "Superset" record has no name/sets of its own -- the actual
+            # exercises live nested one level down in its `supersets` array,
+            # each shaped like a normal record. Flatten both shapes into a
+            # single list of exercises so nothing inside a superset gets
+            # silently dropped.
+            exercises = []
             for rec in w.get("records", []):
+                if rec.get("type") == "Superset":
+                    exercises.extend(rec.get("supersets", []))
+                else:
+                    exercises.append(rec)
+
+            for rec in exercises:
                 exercise_name = rec.get("name")
                 idx = 0
                 for s in rec.get("sets", []):
