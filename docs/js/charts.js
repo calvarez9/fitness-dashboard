@@ -107,8 +107,9 @@ export function renderTrendChart(svg, points, opts = {}) {
 }
 
 /**
- * rows: [{ label, value, sub? }]  sorted by caller, rendered in that order
- * opts: { emptyMessage }
+ * rows: [{ label, value, sub?, key? }]  sorted by caller, rendered in that order
+ * opts: { emptyMessage, onClick(row) }  -- when onClick is given, each row
+ *   renders as a button (drill-down: exercise -> sessions, movement -> exercises).
  */
 export function renderBarList(container, rows, opts = {}) {
   container.innerHTML = "";
@@ -121,8 +122,10 @@ export function renderBarList(container, rows, opts = {}) {
   }
   const max = Math.max(...rows.map((r) => r.value), 0);
   rows.forEach((r) => {
-    const row = document.createElement("div");
-    row.className = "bar-row";
+    const clickable = !!opts.onClick;
+    const row = document.createElement(clickable ? "button" : "div");
+    if (clickable) row.type = "button";
+    row.className = "bar-row" + (clickable ? " clickable" : "");
     const pct = max > 0 ? Math.max(4, (r.value / max) * 100) : 0;
     const valueText = typeof r.value === "number" ? r.value.toLocaleString(undefined, { maximumFractionDigits: 1 }) : r.value;
     row.innerHTML = `
@@ -132,6 +135,7 @@ export function renderBarList(container, rows, opts = {}) {
       </div>
       <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
     `;
+    if (clickable) row.addEventListener("click", () => opts.onClick(r));
     container.appendChild(row);
   });
 }

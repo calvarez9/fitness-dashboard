@@ -159,7 +159,8 @@ main#content { padding: 16px 16px 60px; }
   max-height: calc(100dvh - 40px); overflow-y: auto;
 }
 .modal-card.wide { max-width: 480px; }
-.modal-header { display: flex; align-items: center; justify-content: space-between; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.modal-header-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .modal-header h3 { margin: 0; font-size: 16px; }
 
 /* ---------- Workout list ---------- */
@@ -193,6 +194,19 @@ main#content { padding: 16px 16px 60px; }
 .set-row .set-marker { flex: none; width: 14px; text-align: center; color: var(--text-muted); font-weight: 700; }
 .set-row.warmup { color: var(--text-muted); }
 
+/* ---------- Body map (ported from FitLog) ---------- */
+.bodymap-row { display: flex; justify-content: center; gap: 18px; margin-bottom: 14px; }
+.bodymap-figure { flex: 1; max-width: 150px; text-align: center; margin: 0; }
+.bodymap-figure svg { width: 100%; height: auto; display: block; }
+.bodymap-figure figcaption {
+  font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.06em; margin-top: 6px; font-weight: 600;
+}
+.bm-outline { fill: none; stroke: var(--baseline); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.bm-region { stroke: var(--surface-1); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.bm-region.bm-zero { fill: var(--surface-3); }
+.bm-region.bm-active { fill: var(--series-2); fill-opacity: var(--bm-opacity, 0.3); }
+
 /* ---------- Bar list (exercise / movement / muscle stats) ---------- */
 .bar-list { display: flex; flex-direction: column; gap: 12px; }
 .bar-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
@@ -201,6 +215,8 @@ main#content { padding: 16px 16px 60px; }
 .bar-sub { color: var(--text-muted); }
 .bar-track { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 999px; background: var(--series-1); }
+.bar-row.clickable { display: block; width: 100%; background: none; border: none; padding: 4px 6px; margin: -4px -6px; border-radius: var(--radius-s); cursor: pointer; font-family: var(--font); text-align: left; }
+.bar-row.clickable:hover { background: var(--surface-3); }
 
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);

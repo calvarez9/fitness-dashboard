@@ -1,6 +1,7 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
 import { resolveExerciseMeta, MUSCLES, MOVEMENTS, MOVEMENT_LABEL } from "./exerciseLibrary.js";
+import { renderBarList } from "./charts.js";
 
 let cache = { workouts: [], setsByWorkout: new Map(), segmentsByWorkout: new Map(), linkedActivityByWorkout: new Map() };
 
@@ -91,6 +92,7 @@ export function renderWorkoutsList(container, onOpen) {
     }
 
     const linked = cache.linkedActivityByWorkout.get(w.id);
+    if (linked?.avg_hr != null) sub += ` · ${linked.avg_hr} avg hr`;
     const row = document.createElement("button");
     row.type = "button";
     row.className = "workout-row";
@@ -248,15 +250,97 @@ export function computeMovementMuscleStats() {
     });
   }
 
-  const movementRows = MOVEMENTS.map((m) => ({ label: MOVEMENT_LABEL[m.key], value: round(movementTotals[m.key]) }))
+  const movementRows = MOVEMENTS.map((m) => ({ key: m.key, label: MOVEMENT_LABEL[m.key], value: round(movementTotals[m.key]) }))
     .filter((r) => r.value > 0)
     .sort((a, b) => b.value - a.value);
 
-  const muscleRows = MUSCLES.map((m) => ({ label: m.label, value: round(muscleTotals[m.key]) }))
+  const muscleRows = MUSCLES.map((m) => ({ key: m.key, label: m.label, value: round(muscleTotals[m.key]) }))
     .filter((r) => r.value > 0)
     .sort((a, b) => b.value - a.value);
 
-  return { movementRows, muscleRows, unmatched: [...unmatched] };
+  return { movementRows, muscleRows, muscleTotals, unmatched: [...unmatched] };
+}
+
+// ---------- Drill-down: exercise -> sessions, movement -> exercises ----------
+
+// All sessions (workouts) in the currently loaded range that include a
+// given exercise, most recent first, with just that exercise's sets.
+function sessionsForExercise(exerciseName) {
+  const out = [];
+  for (const [workoutId, sets] of cache.setsByWorkout.entries()) {
+    const relevant = sets.filter((s) => s.exercise_name === exerciseName && !s.is_warmup);
+    if (!relevant.length) continue;
+    const workout = cache.workouts.find((w) => w.id === workoutId);
+    if (workout) out.push({ workout, sets: relevant.sort((a, b) => a.set_index - b.set_index) });
+  }
+  return out.sort((a, b) => new Date(b.workout.date) - new Date(a.workout.date));
+}
+
+export function renderExerciseDetail(container, exerciseName, onOpenWorkout) {
+  container.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>${esc(exerciseName)}</h4>`;
+  container.appendChild(header);
+
+  const sessions = sessionsForExercise(exerciseName);
+  if (!sessions.length) {
+    container.appendChild(emptyNote("No sessions in range."));
+    return;
+  }
+
+  sessions.forEach(({ workout, sets }) => {
+    const dateLabel = new Date(workout.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    const setSummary = sets
+      .map((s) => {
+        const parts = [];
+        if (s.weight != null) parts.push(`${s.weight}`);
+        if (s.reps != null) parts.push(`×${s.reps}`);
+        return parts.length ? parts.join(" ") : "—";
+      })
+      .join(", ");
+
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "workout-row";
+    row.innerHTML = `
+      <span class="workout-row-date">${esc(dateLabel)}</span>
+      <span class="workout-row-main">
+        <span class="workout-row-name">${esc(workout.name || "Workout")}</span>
+        <span class="workout-row-sub">${esc(setSummary)}</span>
+      </span>
+    `;
+    row.addEventListener("click", () => onOpenWorkout(workout.id));
+    container.appendChild(row);
+  });
+}
+
+export function renderMovementDetail(container, movementKey, onOpenExercise) {
+  container.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>${esc(MOVEMENT_LABEL[movementKey] || movementKey)}</h4>`;
+  container.appendChild(header);
+
+  const totals = new Map(); // exercise_name -> sets
+  for (const sets of cache.setsByWorkout.values()) {
+    sets.forEach((s) => {
+      if (s.is_warmup) return;
+      if (resolveExerciseMeta(s.exercise_name).movement !== movementKey) return;
+      totals.set(s.exercise_name, (totals.get(s.exercise_name) || 0) + 1);
+    });
+  }
+
+  const rows = [...totals.entries()].map(([name, sets]) => ({ label: name, value: sets })).sort((a, b) => b.value - a.value);
+  if (!rows.length) {
+    container.appendChild(emptyNote("No exercises in range."));
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "bar-list";
+  container.appendChild(list);
+  renderBarList(list, rows, { onClick: (r) => onOpenExercise(r.label) });
 }
 
 function round(n) {

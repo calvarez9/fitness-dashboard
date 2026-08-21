@@ -2,8 +2,17 @@ import { initAuth } from "./auth.js";
 import { loadDashboard } from "./dashboard.js";
 import { importFitLogBackup } from "./importFitLog.js";
 import { renderBarList } from "./charts.js";
-import { loadWorkouts, renderWorkoutsList, renderWorkoutDetail, computeExerciseStats, computeMovementMuscleStats } from "./workouts.js";
+import {
+  loadWorkouts,
+  renderWorkoutsList,
+  renderWorkoutDetail,
+  renderExerciseDetail,
+  renderMovementDetail,
+  computeExerciseStats,
+  computeMovementMuscleStats,
+} from "./workouts.js";
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel } from "./calendar.js";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -19,9 +28,35 @@ function currentRangeDays() {
   return parseInt($("#rangeSelect").value, 10);
 }
 
-function openWorkout(id) {
-  renderWorkoutDetail($("#workoutModalBody"), id);
+// ---------- Detail modal: a small back-stack over workout / exercise / movement views ----------
+// Movement Pattern Volume -> click a movement -> exercises in it -> click one
+// -> sessions it was performed in -> click one -> the full workout, HR and all.
+let modalStack = [];
+
+function renderModalTop() {
+  const top = modalStack[modalStack.length - 1];
+  $("#workoutModalBack").hidden = modalStack.length <= 1;
+  const body = $("#workoutModalBody");
+  if (top.type === "workout") renderWorkoutDetail(body, top.payload);
+  else if (top.type === "exercise") renderExerciseDetail(body, top.payload, (id) => pushModal("workout", id));
+  else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
+}
+
+function pushModal(type, payload) {
+  modalStack.push({ type, payload });
   $("#workoutModal").hidden = false;
+  renderModalTop();
+}
+
+function popModal() {
+  modalStack.pop();
+  if (!modalStack.length) $("#workoutModal").hidden = true;
+  else renderModalTop();
+}
+
+function closeModal() {
+  modalStack = [];
+  $("#workoutModal").hidden = true;
 }
 
 async function refreshWorkouts(days) {
@@ -29,14 +64,19 @@ async function refreshWorkouts(days) {
   const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
   await loadWorkouts(start, end);
 
-  renderWorkoutsList($("#workoutsList"), openWorkout);
+  renderWorkoutsList($("#workoutsList"), (id) => pushModal("workout", id));
   renderBarList($("#barExercises"), computeExerciseStats(10), {
     emptyMessage: "No exercises in range yet.",
+    onClick: (r) => pushModal("exercise", r.label),
   });
 
-  const { movementRows, muscleRows, unmatched } = computeMovementMuscleStats();
-  renderBarList($("#barMovements"), movementRows, { emptyMessage: "No strength sets in range yet." });
+  const { movementRows, muscleRows, muscleTotals, unmatched } = computeMovementMuscleStats();
+  renderBarList($("#barMovements"), movementRows, {
+    emptyMessage: "No strength sets in range yet.",
+    onClick: (r) => pushModal("movement", r.key),
+  });
   renderBarList($("#barMuscles"), muscleRows, { emptyMessage: "No strength sets in range yet." });
+  applyVolumeColors($("#bodyFront"), $("#bodyBack"), muscleTotals);
 
   const note = $("#unmatchedNote");
   if (unmatched.length) {
@@ -93,12 +133,13 @@ function initDashboardUI() {
     if (e.target === $("#importModal")) $("#importModal").hidden = true;
   });
 
-  $("#workoutModalClose").addEventListener("click", () => {
-    $("#workoutModal").hidden = true;
-  });
+  $("#workoutModalBack").addEventListener("click", popModal);
+  $("#workoutModalClose").addEventListener("click", closeModal);
   $("#workoutModal").addEventListener("click", (e) => {
-    if (e.target === $("#workoutModal")) $("#workoutModal").hidden = true;
+    if (e.target === $("#workoutModal")) closeModal();
   });
+
+  renderBodyMaps($("#bodyFront"), $("#bodyBack"));
 
   $("#calPrev").addEventListener("click", () => {
     calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
