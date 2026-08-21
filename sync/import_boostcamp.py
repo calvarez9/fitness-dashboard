@@ -30,8 +30,26 @@ Usage:
 import os
 import sys
 import json
+import datetime as dt
+from zoneinfo import ZoneInfo
 
 import requests
+
+# Boostcamp's `finished_at` is a naive local timestamp with no timezone
+# marker (e.g. "2026-08-20 19:17:28") -- confirmed by cross-referencing
+# against real Garmin activity times, which land squarely inside a
+# matching Garmin session once this offset is applied. Storing it as-is
+# into a timestamptz column silently mis-tags it as UTC, off by several
+# hours. Convert it to real UTC before it goes anywhere near the database.
+LOCAL_TZ = ZoneInfo("America/Puerto_Rico")
+
+
+def local_to_utc_iso(naive_str):
+    if not naive_str:
+        return naive_str
+    naive = dt.datetime.strptime(naive_str, "%Y-%m-%d %H:%M:%S")
+    local = naive.replace(tzinfo=LOCAL_TZ)
+    return local.astimezone(dt.UTC).isoformat()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
@@ -100,7 +118,7 @@ def main():
             workout_rows.append(
                 {
                     "id": wid,
-                    "date": w.get("finished_at"),
+                    "date": local_to_utc_iso(w.get("finished_at")),
                     "name": w.get("title") or w.get("name"),
                     "type": "strength",
                     "raw": w,
