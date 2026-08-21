@@ -131,9 +131,51 @@ main#content { padding: 16px 16px 60px; }
 .modal-card {
   width: 100%; max-width: 380px; background: var(--surface-1); border: 1px solid var(--border);
   border-radius: var(--radius-m); padding: 20px; display: flex; flex-direction: column; gap: 12px;
+  max-height: calc(100dvh - 40px); overflow-y: auto;
 }
+.modal-card.wide { max-width: 480px; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; }
 .modal-header h3 { margin: 0; font-size: 16px; }
+
+/* ---------- Workout list ---------- */
+.workout-list { display: flex; flex-direction: column; gap: 2px; }
+.workout-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: none; border: none; border-radius: var(--radius-s); cursor: pointer;
+  padding: 10px 6px; text-align: left; font-family: var(--font); color: var(--text-primary);
+}
+.workout-row:hover { background: var(--surface-3); }
+.workout-row-date { flex: none; width: 66px; font-size: 12px; color: var(--text-muted); }
+.workout-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.workout-row-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workout-row-sub { font-size: 12px; color: var(--text-secondary); }
+.workout-type-badge {
+  flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 3px 8px; border-radius: 999px; color: #fff;
+}
+.workout-type-badge.strength { background: var(--series-1); }
+.workout-type-badge.cardio { background: var(--series-2); }
+
+/* ---------- Workout detail (inside modal) ---------- */
+.workout-detail-header h4 { margin: 0; font-size: 17px; }
+.workout-detail-body { display: flex; flex-direction: column; gap: 14px; }
+.exercise-block {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-s);
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;
+}
+.exercise-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.set-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+.set-row .set-marker { flex: none; width: 14px; text-align: center; color: var(--text-muted); font-weight: 700; }
+.set-row.warmup { color: var(--text-muted); }
+
+/* ---------- Bar list (exercise / movement / muscle stats) ---------- */
+.bar-list { display: flex; flex-direction: column; gap: 12px; }
+.bar-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.bar-label { font-size: 13px; font-weight: 600; }
+.bar-value { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.bar-sub { color: var(--text-muted); }
+.bar-track { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 999px; background: var(--series-1); }
 
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);

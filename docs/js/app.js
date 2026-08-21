@@ -1,6 +1,8 @@
 import { initAuth } from "./auth.js";
 import { loadDashboard } from "./dashboard.js";
 import { importFitLogBackup } from "./importFitLog.js";
+import { renderBarList } from "./charts.js";
+import { loadWorkouts, renderWorkoutsList, renderWorkoutDetail, computeExerciseStats, computeMovementMuscleStats } from "./workouts.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -16,9 +18,38 @@ function currentRangeDays() {
   return parseInt($("#rangeSelect").value, 10);
 }
 
+function openWorkout(id) {
+  renderWorkoutDetail($("#workoutModalBody"), id);
+  $("#workoutModal").hidden = false;
+}
+
+async function refreshWorkouts(days) {
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+  await loadWorkouts(start, end);
+
+  renderWorkoutsList($("#workoutsList"), openWorkout);
+  renderBarList($("#barExercises"), computeExerciseStats(10), {
+    emptyMessage: "No exercises in range yet.",
+  });
+
+  const { movementRows, muscleRows, unmatched } = computeMovementMuscleStats();
+  renderBarList($("#barMovements"), movementRows, { emptyMessage: "No strength sets in range yet." });
+  renderBarList($("#barMuscles"), muscleRows, { emptyMessage: "No strength sets in range yet." });
+
+  const note = $("#unmatchedNote");
+  if (unmatched.length) {
+    note.hidden = false;
+    note.textContent = `Not mapped to a muscle group yet: ${unmatched.join(", ")}`;
+  } else {
+    note.hidden = true;
+  }
+}
+
 async function refresh() {
   try {
     await loadDashboard(currentRangeDays());
+    await refreshWorkouts(currentRangeDays());
   } catch (e) {
     console.error(e);
     toast("Couldn't load dashboard data — see console.");
@@ -36,6 +67,13 @@ function initDashboardUI() {
   });
   $("#importModal").addEventListener("click", (e) => {
     if (e.target === $("#importModal")) $("#importModal").hidden = true;
+  });
+
+  $("#workoutModalClose").addEventListener("click", () => {
+    $("#workoutModal").hidden = true;
+  });
+  $("#workoutModal").addEventListener("click", (e) => {
+    if (e.target === $("#workoutModal")) $("#workoutModal").hidden = true;
   });
 
   $("#importGoBtn").addEventListener("click", async () => {

@@ -105,3 +105,33 @@ export function renderTrendChart(svg, points, opts = {}) {
     });
   }
 }
+
+/**
+ * rows: [{ label, value, sub? }]  sorted by caller, rendered in that order
+ * opts: { emptyMessage }
+ */
+export function renderBarList(container, rows, opts = {}) {
+  container.innerHTML = "";
+  if (!rows.length) {
+    const div = document.createElement("div");
+    div.className = "chart-empty";
+    div.textContent = opts.emptyMessage || "No data in this range yet.";
+    container.appendChild(div);
+    return;
+  }
+  const max = Math.max(...rows.map((r) => r.value), 0);
+  rows.forEach((r) => {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    const pct = max > 0 ? Math.max(4, (r.value / max) * 100) : 0;
+    const valueText = typeof r.value === "number" ? r.value.toLocaleString(undefined, { maximumFractionDigits: 1 }) : r.value;
+    row.innerHTML = `
+      <div class="bar-row-top">
+        <span class="bar-label">${r.label}</span>
+        <span class="bar-value">${valueText}${r.sub ? ` <span class="bar-sub">${r.sub}</span>` : ""}</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+    `;
+    container.appendChild(row);
+  });
+}
