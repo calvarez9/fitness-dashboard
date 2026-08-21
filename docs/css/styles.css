@@ -131,13 +131,6 @@ main#content { padding: 16px 16px 60px; }
 .search-card { display: flex; flex-direction: column; gap: 8px; }
 #searchResults:empty { display: none; }
 
-/* ---------- Recovery: training vs rest day comparison ---------- */
-.recovery-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 7px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
-.recovery-row:last-child { border-bottom: none; }
-.recovery-header { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 700; padding-bottom: 8px; }
-.recovery-label { color: var(--text-secondary); }
-.recovery-val { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
-
 /* ---------- Progress chart (ported from FitLog: per-exercise 1RM trend) ---------- */
 .progress-svg { width: 100%; height: auto; display: block; }
 .progress-svg text { font-family: var(--font); fill: var(--text-muted); font-size: 10px; }

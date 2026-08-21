@@ -115,7 +115,6 @@ export async function loadDashboard(days) {
 
   renderStats({ daily, activities, workouts, priorSummary });
   renderHeatmap({ start, end, workouts, activities });
-  renderRecovery({ daily, workouts, activities });
 
   renderTrendChart(
     $("#chartRhr"),
@@ -242,43 +241,3 @@ function renderHeatmap({ start, end, workouts, activities }) {
   }
 }
 
-// Training day = any day with a logged workout or a Garmin activity.
-// Compares Garmin health metrics on those days against every other day in
-// range, so you can see e.g. whether stress/RHR actually track training.
-function renderRecovery({ daily, workouts, activities }) {
-  const el = $("#recoveryComparison");
-  el.innerHTML = "";
-
-  const trainingDays = new Set();
-  workouts.forEach((w) => trainingDays.add(w.date.slice(0, 10)));
-  activities.forEach((a) => trainingDays.add(a.start_time.slice(0, 10)));
-
-  const bucket = { training: { rhr: [], stress: [], battery: [] }, rest: { rhr: [], stress: [], battery: [] } };
-  daily.forEach((d) => {
-    const b = trainingDays.has(d.date) ? bucket.training : bucket.rest;
-    if (d.resting_hr != null) b.rhr.push(d.resting_hr);
-    if (d.avg_stress != null) b.stress.push(d.avg_stress);
-    if (d.body_battery_high != null) b.battery.push(d.body_battery_high);
-  });
-
-  const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
-  const training = { rhr: avg(bucket.training.rhr), stress: avg(bucket.training.stress), battery: avg(bucket.training.battery), days: bucket.training.rhr.length + bucket.training.stress.length + bucket.training.battery.length };
-  const rest = { rhr: avg(bucket.rest.rhr), stress: avg(bucket.rest.stress), battery: avg(bucket.rest.battery), days: bucket.rest.rhr.length + bucket.rest.stress.length + bucket.rest.battery.length };
-
-  if (!training.days && !rest.days) {
-    el.innerHTML = `<p class="chart-empty">Not enough data in range yet.</p>`;
-    return;
-  }
-
-  const row = (label, unit, t, r) => {
-    if (t == null && r == null) return "";
-    return `<div class="recovery-row"><span class="recovery-label">${label}</span><span class="recovery-val">${t != null ? Math.round(t) : "—"}${unit}</span><span class="recovery-val">${r != null ? Math.round(r) : "—"}${unit}</span></div>`;
-  };
-
-  el.innerHTML = `
-    <div class="recovery-row recovery-header"><span></span><span>Training days</span><span>Rest days</span></div>
-    ${row("Resting HR", " bpm", training.rhr, rest.rhr)}
-    ${row("Avg Stress", "", training.stress, rest.stress)}
-    ${row("Body Battery (high)", "", training.battery, rest.battery)}
-  `;
-}
