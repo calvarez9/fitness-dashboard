@@ -336,7 +336,7 @@ function initDashboardUI() {
       const result = await importFitLogBackup(data, (done, total) => {
         $("#importStatus").textContent = `Importing… ${done}/${total} workouts`;
       });
-      $("#importStatus").textContent = `Done — ${result.workoutCount} workouts, ${result.setCount} sets, ${result.segmentCount} cardio segments.`;
+      $("#importStatus").textContent = `Done — ${result.workoutCount} workouts, ${result.setCount} sets, ${result.segmentCount} cardio segments, ${result.exerciseCount} exercise definitions.`;
       toast("FitLog backup imported ✓");
       await refresh();
     } catch (e) {

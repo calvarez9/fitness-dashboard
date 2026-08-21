@@ -1,8 +1,12 @@
 import { supabase } from "./supabaseClient.js";
 
 // Imports a FitLog backup export (Settings -> Export backup in the FitLog app)
-// into the fitlog_workouts / fitlog_sets / fitlog_cardio_segments tables.
-// Re-importing is safe: each workout's child rows are replaced, not duplicated.
+// into the fitlog_workouts / fitlog_sets / fitlog_cardio_segments tables,
+// and syncs FitLog's own custom/edited exercises (movement, muscles,
+// athleticism) into exercise_overrides -- one-way, FitLog -> dashboard,
+// same direction workouts already flow in. Re-importing is safe: each
+// workout's child rows are replaced, not duplicated, and exercise rows
+// are just upserted by name.
 export async function importFitLogBackup(data, onProgress) {
   if (!data || !Array.isArray(data.workouts)) {
     throw new Error("That doesn't look like a FitLog backup file (missing 'workouts' array).");
@@ -11,6 +15,23 @@ export async function importFitLogBackup(data, onProgress) {
   let workoutCount = 0;
   let setCount = 0;
   let segmentCount = 0;
+  let exerciseCount = 0;
+
+  if (Array.isArray(data.exercises) && data.exercises.length) {
+    const rows = data.exercises
+      .filter((e) => e && e.name)
+      .map((e) => ({
+        name: e.name,
+        movement: e.movement || "isolation",
+        muscles: e.muscles || {},
+        athleticism: e.athleticism || 0,
+      }));
+    if (rows.length) {
+      const { error } = await supabase.from("exercise_overrides").upsert(rows, { onConflict: "name" });
+      if (error) throw new Error(`Exercise library: ${error.message}`);
+      exerciseCount = rows.length;
+    }
+  }
 
   for (const w of data.workouts) {
     const type = w.type === "cardio" ? "cardio" : "strength";
@@ -76,5 +97,5 @@ export async function importFitLogBackup(data, onProgress) {
     if (onProgress) onProgress(workoutCount, data.workouts.length);
   }
 
-  return { workoutCount, setCount, segmentCount };
+  return { workoutCount, setCount, segmentCount, exerciseCount };
 }
