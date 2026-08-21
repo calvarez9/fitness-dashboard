@@ -87,9 +87,16 @@ def delete_sets_for(workout_ids):
 def is_real_set(s):
     if s.get("skipped"):
         return False
-    if (s.get("value", "") == "") and (s.get("amount", "") == ""):
-        return False
-    return True
+    if s.get("value", "") != "" or s.get("amount", "") != "":
+        return True
+    # Cardio-style time-based entries (e.g. "2km Row") often leave value/
+    # amount blank and store the actually-performed duration in
+    # archived_time instead -- unlike rep-based sets, they don't get a
+    # separate "user"-sourced confirmation row, so this is the only signal
+    # that the exercise was actually done rather than left as a suggestion.
+    if s.get("target_type") == "time" and s.get("archived_time"):
+        return True
+    return False
 
 
 def to_number(x):

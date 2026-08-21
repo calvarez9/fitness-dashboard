@@ -105,6 +105,10 @@ const EXTRA_EXERCISES = {
   "Incline Bicep Curl": { movement: "isolation", muscles: { biceps: 1, forearms: 0.5 } },
   "Narrow Push Up": { movement: "horizontalPush", muscles: { triceps: 1, chest: 0.5, frontDelts: 0.5 } },
   "Overhead Tricep Extension": { movement: "isolation", muscles: { triceps: 1 } },
+  // Cardio finishers logged by distance -- see stripDistancePrefix() below,
+  // which turns "1km Row" / "2km Row" / etc. into just "Row" before lookup.
+  "Row": { movement: "isolation", muscles: { lats: 1, upperBack: 0.5, hamstrings: 0.5, quadriceps: 0.5 } },
+  "Jog": { movement: "isolation", muscles: { quadriceps: 0.5, hamstrings: 0.5, calves: 1 } },
 };
 
 export const EMPTY_META = { movement: "isolation", muscles: {} };
@@ -116,6 +120,11 @@ function normKey(name) {
 }
 function stripEquipmentSuffix(name) {
   return name.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+// "1km Row" / "2km Row" / "5k Run" -> "Row" / "Run" -- cardio finishers
+// logged by distance, which varies session to session.
+function stripDistancePrefix(name) {
+  return name.replace(/^\d+(\.\d+)?\s*km?\s+/i, "").trim();
 }
 
 const LOOKUP = new Map(Object.entries(ALL_EXERCISES).map(([k, v]) => [normKey(k), v]));
@@ -157,6 +166,12 @@ export function resolveExerciseMeta(rawName) {
 
   const strippedMatch = LOOKUP.get(strippedKey);
   if (strippedMatch) return { ...strippedMatch, matched: true, canonicalName: stripped };
+
+  const distanceStripped = stripDistancePrefix(stripped);
+  if (distanceStripped !== stripped) {
+    const distanceMatch = LOOKUP.get(normKey(distanceStripped));
+    if (distanceMatch) return { ...distanceMatch, matched: true, canonicalName: distanceStripped };
+  }
 
   return { ...EMPTY_META, matched: false, canonicalName: stripped };
 }
