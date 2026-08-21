@@ -59,6 +59,7 @@ body { margin: 0; font-family: var(--font); background: var(--surface-2); color:
 }
 .login-card .brand { margin: 0 0 4px; font-size: 22px; }
 .login-card input { width: 100%; }
+.pin-input { text-align: center; font-size: 24px; letter-spacing: 0.5em; padding-left: calc(11px + 0.5em); }
 .error-text { color: var(--critical); font-size: 13px; margin: 0; }
 
 /* ---------- Topbar ---------- */
