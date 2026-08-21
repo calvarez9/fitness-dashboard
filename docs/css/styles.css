@@ -307,6 +307,14 @@ main#content { padding: 16px 16px 60px; }
 .bar-row-child .bar-label { font-weight: 500; font-size: 12px; color: var(--text-secondary); }
 .bar-row-child .bar-track { height: 6px; }
 
+/* ---------- Collapsible lists: "See N more" / "Minimize" ---------- */
+.list-toggle {
+  display: block; width: 100%; margin-top: 8px; padding: 9px; text-align: center;
+  font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--series-1);
+  background: var(--surface-2); border: none; border-radius: var(--radius-s); cursor: pointer;
+}
+.list-toggle:hover { background: var(--surface-3); }
+
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: var(--text-primary); color: var(--surface-1); padding: 10px 16px;

@@ -220,3 +220,30 @@ export function renderProgressChart(svg, points, { yLabel = "" } = {}) {
     if (e.target.tagName !== "circle") tooltip.style.display = "none";
   });
 }
+
+/**
+ * Call after any list-rendering function (renderWorkoutsList, renderPRBoard,
+ * renderBarList, ...) has finished populating `container`, to cap it at
+ * `limit` visible items with a "See N more" / "Minimize" toggle appended.
+ * Works generically off container.children -- no-op if there's nothing to
+ * collapse (an empty-state message, or already <= limit items).
+ */
+export function makeCollapsible(container, limit = 3) {
+  const items = [...container.children];
+  if (items.length <= limit) return;
+
+  items.slice(limit).forEach((el) => (el.hidden = true));
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "list-toggle";
+  let expanded = false;
+  const label = () => (expanded ? "Minimize" : `See ${items.length - limit} more`);
+  toggle.textContent = label();
+  toggle.addEventListener("click", () => {
+    expanded = !expanded;
+    items.slice(limit).forEach((el) => (el.hidden = !expanded));
+    toggle.textContent = label();
+  });
+  container.appendChild(toggle);
+}

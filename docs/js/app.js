@@ -1,7 +1,7 @@
 import { initAuth } from "./auth.js";
 import { loadDashboard } from "./dashboard.js";
 import { importFitLogBackup } from "./importFitLog.js";
-import { renderBarList } from "./charts.js";
+import { renderBarList, makeCollapsible } from "./charts.js";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -87,10 +87,13 @@ async function refreshWorkouts(days) {
   renderTrainingEmphasis($("#trainingEmphasis"), emphasis);
 
   renderWorkoutsList($("#workoutsList"), (id) => pushModal("workout", id));
+  makeCollapsible($("#workoutsList"));
+
   renderBarList($("#barExercises"), computeExerciseStats(10), {
     emptyMessage: "No exercises in range yet.",
     onClick: (r) => pushModal("exercise", r.label),
   });
+  makeCollapsible($("#barExercises"));
 
   const { movementRows, muscleRows, muscleTotals, unmatched } = computeMovementMuscleStats();
   renderBarList($("#barMovements"), movementRows, {
@@ -101,6 +104,7 @@ async function refreshWorkouts(days) {
     emptyMessage: "No strength sets in range yet.",
     onClick: (r) => pushModal("muscle", r.key),
   });
+  makeCollapsible($("#barMuscles"));
   lastMuscleTotals = muscleTotals;
   applyVolumeColors($("#bodyFront"), $("#bodyBack"), muscleTotals);
 
@@ -119,6 +123,7 @@ async function refreshPRBoard() {
   try {
     await loadAllTimePRs();
     renderPRBoard($("#prBoard"), (name) => pushModal("exercise", name));
+    makeCollapsible($("#prBoard"));
   } catch (e) {
     console.error(e);
   }
