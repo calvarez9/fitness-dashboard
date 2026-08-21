@@ -22,6 +22,7 @@ export async function importFitLogBackup(data, onProgress) {
         started_at: w.startedAt || null,
         duration_min: w.durationMin ?? null,
         name: w.name || (type === "cardio" ? "Cardio" : "Workout"),
+        notes: w.notes || null,
         type,
         raw: w,
       },

@@ -99,6 +99,7 @@ main#content { padding: 16px 16px 60px; }
 .stat-tile .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
 .stat-tile .stat-value { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; }
 .stat-tile .stat-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.stat-tile .stat-delta { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 
 .chart-section { margin-bottom: 24px; }
 .chart-section h2 { font-size: 14px; font-weight: 700; margin: 0 0 8px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -114,6 +115,17 @@ main#content { padding: 16px 16px 60px; }
 .trend-svg .dot-b { fill: var(--series-2); }
 .trend-svg .legend-text { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
 .chart-empty { color: var(--text-muted); font-size: 13px; padding: 30px; text-align: center; }
+
+/* ---------- Search ---------- */
+.search-card { display: flex; flex-direction: column; gap: 8px; }
+#searchResults:empty { display: none; }
+
+/* ---------- Recovery: training vs rest day comparison ---------- */
+.recovery-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 7px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+.recovery-row:last-child { border-bottom: none; }
+.recovery-header { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 700; padding-bottom: 8px; }
+.recovery-label { color: var(--text-secondary); }
+.recovery-val { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---------- Progress chart (ported from FitLog: per-exercise 1RM trend) ---------- */
 .progress-svg { width: 100%; height: auto; display: block; }
@@ -219,7 +231,8 @@ main#content { padding: 16px 16px 60px; }
 /* ---------- Edit form ---------- */
 .edit-field { display: flex; flex-direction: column; gap: 4px; }
 .edit-field label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.edit-field input, .edit-field select { width: 100%; }
+.edit-field input, .edit-field select, .edit-field textarea { width: 100%; font-family: var(--font); resize: vertical; }
+.workout-notes-display { font-size: 13px; color: var(--text-secondary); font-style: italic; margin: 0 0 4px; }
 .edit-exercise-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .edit-set-row { display: grid; grid-template-columns: 20px 1fr 1fr 1fr auto auto; gap: 6px; align-items: center; }
 .edit-set-row input[type="number"] { width: 100%; padding: 6px 8px; font-size: 13px; }

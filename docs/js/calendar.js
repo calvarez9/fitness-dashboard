@@ -50,7 +50,7 @@ export async function loadMonth(monthDate) {
   const [workoutsRes, activitiesRes, links] = await Promise.all([
     supabase
       .from("fitlog_workouts")
-      .select("id, date, name, type")
+      .select("id, date, name, type, notes")
       .gte("date", start.toISOString())
       .lte("date", end.toISOString()),
     supabase

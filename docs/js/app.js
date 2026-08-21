@@ -11,6 +11,9 @@ import {
   renderMuscleDetail,
   computeExerciseStats,
   computeMovementMuscleStats,
+  loadAllTimePRs,
+  getAllExerciseNames,
+  renderPRBoard,
 } from "./workouts.js";
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
@@ -40,6 +43,7 @@ async function onWorkoutSaved() {
   resetLinksCache();
   await refreshWorkouts(currentRangeDays());
   await refreshCalendar();
+  await refreshPRBoard();
 }
 
 function renderModalTop() {
@@ -103,10 +107,22 @@ async function refreshWorkouts(days) {
   }
 }
 
+// All-time (not scoped to the range selector -- a PR from 8 months ago is
+// still a PR). Re-run after any edit/delete since that can change them.
+async function refreshPRBoard() {
+  try {
+    await loadAllTimePRs();
+    renderPRBoard($("#prBoard"), (name) => pushModal("exercise", name));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 async function refresh() {
   try {
     await loadDashboard(currentRangeDays());
     await refreshWorkouts(currentRangeDays());
+    await refreshPRBoard();
   } catch (e) {
     console.error(e);
     toast("Couldn't load dashboard data — see console.");
@@ -121,6 +137,7 @@ async function onCalendarDaySaved(dateKey) {
   toast("Saved ✓");
   await refreshWorkouts(currentRangeDays());
   await renderCalendarAndGrid(dateKey);
+  await refreshPRBoard();
 }
 
 async function openCalendarDay(dateKey, events) {
@@ -167,6 +184,34 @@ function initDashboardUI() {
   $("#workoutModalClose").addEventListener("click", closeModal);
   $("#workoutModal").addEventListener("click", (e) => {
     if (e.target === $("#workoutModal")) closeModal();
+  });
+
+  $("#searchInput").addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    const results = $("#searchResults");
+    results.innerHTML = "";
+    if (!q) return;
+    getAllExerciseNames()
+      .filter((name) => name.toLowerCase().includes(q))
+      .slice(0, 8)
+      .forEach((name) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "workout-row";
+        const nameEl = document.createElement("span");
+        nameEl.className = "workout-row-main";
+        const inner = document.createElement("span");
+        inner.className = "workout-row-name";
+        inner.textContent = name;
+        nameEl.appendChild(inner);
+        row.appendChild(nameEl);
+        row.addEventListener("click", () => {
+          pushModal("exercise", name);
+          e.target.value = "";
+          results.innerHTML = "";
+        });
+        results.appendChild(row);
+      });
   });
 
   renderBodyMaps($("#bodyFront"), $("#bodyBack"), (muscleKeys) => {

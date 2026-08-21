@@ -18,7 +18,7 @@ function esc(s) {
 export async function loadWorkouts(start, end) {
   const { data: workouts, error: wErr } = await supabase
     .from("fitlog_workouts")
-    .select("id, date, name, type")
+    .select("id, date, name, type, notes")
     .gte("date", start.toISOString())
     .lte("date", end.toISOString())
     .order("date", { ascending: false });
@@ -169,6 +169,13 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
   actions.append(editBtn, deleteBtn);
   container.appendChild(actions);
 
+  if (workout.notes) {
+    const notesEl = document.createElement("p");
+    notesEl.className = "workout-notes-display";
+    notesEl.textContent = `"${workout.notes}"`;
+    container.appendChild(notesEl);
+  }
+
   if (linkedActivity) {
     const bits = [];
     if (linkedActivity.duration_seconds != null) bits.push(`${Math.round(linkedActivity.duration_seconds / 60)} min`);
@@ -237,7 +244,10 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
 
 // ---------- Editing ----------
 async function saveWorkoutEdits(workout, state) {
-  const { error: wErr } = await supabase.from("fitlog_workouts").update({ name: state.name, date: state.date }).eq("id", workout.id);
+  const { error: wErr } = await supabase
+    .from("fitlog_workouts")
+    .update({ name: state.name, date: state.date, notes: state.notes || null })
+    .eq("id", workout.id);
   if (wErr) throw wErr;
 
   if (workout.type === "cardio") {
@@ -302,7 +312,7 @@ function numOrNull(v) {
 function renderWorkoutEditForm(container, workout, sets, segments, linkedActivity, onSaved) {
   container.innerHTML = "";
 
-  const state = { name: workout.name || "", date: workout.date, exercises: [], segments: [] };
+  const state = { name: workout.name || "", date: workout.date, notes: workout.notes || "", exercises: [], segments: [] };
 
   if (workout.type === "cardio") {
     state.segments = segments.map((seg) => ({
@@ -349,6 +359,12 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
     if (e.target.value) state.date = new Date(e.target.value).toISOString();
   });
   container.appendChild(dateField);
+
+  const notesField = document.createElement("div");
+  notesField.className = "edit-field";
+  notesField.innerHTML = `<label>Notes</label><textarea rows="2" placeholder="How it felt, soreness, anything worth remembering…">${esc(state.notes)}</textarea>`;
+  notesField.querySelector("textarea").addEventListener("input", (e) => (state.notes = e.target.value));
+  container.appendChild(notesField);
 
   const body = document.createElement("div");
   body.className = "workout-detail-body";
@@ -747,4 +763,64 @@ export function renderMuscleDetail(container, muscleKey, onOpenExercise) {
 
 function round(n) {
   return Math.round(n * 2) / 2;
+}
+
+// ---------- All-time PRs (independent of the dashboard's date-range selector) ----------
+let allTimeCache = null; // Map<exerciseName, {oneRM, weight, reps, date}>
+
+export async function loadAllTimePRs() {
+  const { data: workouts, error: wErr } = await supabase.from("fitlog_workouts").select("id, date").eq("type", "strength");
+  if (wErr) throw wErr;
+
+  const dateByWorkout = new Map((workouts || []).map((w) => [w.id, w.date]));
+  const ids = [...dateByWorkout.keys()];
+  const best = new Map();
+
+  if (ids.length) {
+    const { data: sets, error: sErr } = await supabase
+      .from("fitlog_sets")
+      .select("workout_id, exercise_name, reps, weight, is_warmup")
+      .in("workout_id", ids);
+    if (sErr) throw sErr;
+
+    (sets || []).forEach((s) => {
+      if (s.is_warmup || s.weight == null) return;
+      const oneRM = epley1RM(s.weight, s.reps || 1);
+      const cur = best.get(s.exercise_name);
+      if (!cur || oneRM > cur.oneRM) {
+        best.set(s.exercise_name, { oneRM, weight: s.weight, reps: s.reps, date: dateByWorkout.get(s.workout_id) });
+      }
+    });
+  }
+
+  allTimeCache = best;
+  return best;
+}
+
+export function getAllExerciseNames() {
+  return allTimeCache ? [...allTimeCache.keys()].sort((a, b) => a.localeCompare(b)) : [];
+}
+
+export function renderPRBoard(container, onOpenExercise) {
+  container.innerHTML = "";
+  if (!allTimeCache || !allTimeCache.size) {
+    container.appendChild(emptyNote("No strength data yet."));
+    return;
+  }
+  const rows = [...allTimeCache.entries()].sort((a, b) => b[1].oneRM - a[1].oneRM);
+  rows.forEach(([name, pr]) => {
+    const dateLabel = pr.date ? new Date(pr.date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "workout-row";
+    row.innerHTML = `
+      <span class="workout-row-date">${esc(dateLabel)}</span>
+      <span class="workout-row-main">
+        <span class="workout-row-name">${esc(name)}</span>
+        <span class="workout-row-sub">${pr.weight} lb × ${pr.reps} · est. 1RM ${Math.round(pr.oneRM)} lb</span>
+      </span>
+    `;
+    row.addEventListener("click", () => onOpenExercise(name));
+    container.appendChild(row);
+  });
 }
