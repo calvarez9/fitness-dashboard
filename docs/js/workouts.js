@@ -860,3 +860,65 @@ export function renderPRBoard(container, onOpenExercise) {
     container.appendChild(row);
   });
 }
+
+// ---------- Training Emphasis: Strength / Athleticism / Cardio ----------
+// Deliberately three numbers in their own native units (sets / weighted
+// score / minutes) rather than one normalized chart -- see the reasoning
+// discussed with the user: forcing cardio minutes onto a "sets" scale (or
+// vice versa) would be more misleading than honest.
+export async function loadTrainingEmphasis(start, end) {
+  let strengthSets = 0;
+  let athleticismScore = 0;
+  let cardioMinutes = 0;
+
+  for (const sets of cache.setsByWorkout.values()) {
+    sets.forEach((s) => {
+      if (s.is_warmup) return;
+      strengthSets += 1;
+      athleticismScore += resolveExerciseMeta(s.exercise_name).athleticism || 0;
+    });
+  }
+  for (const segments of cache.segmentsByWorkout.values()) {
+    segments.forEach((seg) => {
+      if (seg.duration_min != null) cardioMinutes += seg.duration_min;
+    });
+  }
+
+  const { data, error } = await supabase
+    .from("garmin_activities")
+    .select("duration_seconds")
+    .gte("start_time", start.toISOString())
+    .lte("start_time", end.toISOString());
+  if (!error) {
+    cardioMinutes += (data || []).reduce((sum, a) => sum + (a.duration_seconds || 0) / 60, 0);
+  }
+
+  return {
+    strengthSets: Math.round(strengthSets),
+    athleticismScore: Math.round(athleticismScore * 10) / 10,
+    cardioMinutes: Math.round(cardioMinutes),
+  };
+}
+
+export function renderTrainingEmphasis(container, { strengthSets, athleticismScore, cardioMinutes }) {
+  container.innerHTML = `
+    <div class="stat-row emphasis-row">
+      <div class="stat-tile">
+        <div class="stat-label">Strength</div>
+        <div class="stat-value">${strengthSets}</div>
+        <div class="stat-sub">working sets</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Athleticism</div>
+        <div class="stat-value">${athleticismScore}</div>
+        <div class="stat-sub">weighted score</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Cardio</div>
+        <div class="stat-value">${cardioMinutes}</div>
+        <div class="stat-sub">minutes</div>
+      </div>
+    </div>
+    <p class="muted small">Athleticism weights each set by movement: isolation work counts 0, compound lifts ~0.2–0.4/set, explosive or power work (jumps, throws, Olympic lifts) 1.0–2.0/set.</p>
+  `;
+}

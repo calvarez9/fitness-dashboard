@@ -14,6 +14,8 @@ import {
   loadAllTimePRs,
   getAllExerciseNames,
   renderPRBoard,
+  loadTrainingEmphasis,
+  renderTrainingEmphasis,
 } from "./workouts.js";
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
@@ -80,6 +82,9 @@ async function refreshWorkouts(days) {
   const end = new Date();
   const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
   await loadWorkouts(start, end);
+
+  const emphasis = await loadTrainingEmphasis(start, end);
+  renderTrainingEmphasis($("#trainingEmphasis"), emphasis);
 
   renderWorkoutsList($("#workoutsList"), (id) => pushModal("workout", id));
   renderBarList($("#barExercises"), computeExerciseStats(10), {

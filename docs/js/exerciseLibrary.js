@@ -59,40 +59,47 @@ export const MOVEMENT_GROUPS = [
   { key: "pull", label: "Pull", members: ["verticalPull", "horizontalPull"] },
 ];
 
+// `athleticism` (present only on compound/loaded movements, absent = 0 --
+// see EMPTY_META and how it's read below) is a per-set weight toward the
+// Training Emphasis view's Athleticism score, separate from and additional
+// to the movement/muscle credit above. Ordinary compound lifts get a
+// modest 0.2-0.4 (they build some general athletic capacity but aren't
+// explosive); true power/explosive work is weighted far higher, see
+// ATHLETICISM_EXERCISES below. Isolation work stays at 0.
 export const BUILTIN_EXERCISES = {
-  "Barbell Squat": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, abs: 0.5, lowerBack: 0.5, adductors: 0.5 } },
-  "Bench Press": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 } },
-  "Deadlift": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, lowerBack: 1, upperBack: 0.5, traps: 0.5, forearms: 0.5 } },
-  "Overhead Press": { movement: "verticalPush", muscles: { frontDelts: 1, middleDelts: 0.5, triceps: 0.5 } },
-  "Barbell Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 } },
-  "Pull-Up": { movement: "verticalPull", muscles: { lats: 1, upperBack: 0.5, biceps: 0.5 } },
-  "Chin-Up": { movement: "verticalPull", muscles: { lats: 1, biceps: 1, upperBack: 0.5 } },
-  "Push-Up": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 } },
-  "Dip": { movement: "verticalPush", muscles: { triceps: 1, chest: 0.5, frontDelts: 0.5 } },
+  "Barbell Squat": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, abs: 0.5, lowerBack: 0.5, adductors: 0.5 }, athleticism: 0.4 },
+  "Bench Press": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 }, athleticism: 0.2 },
+  "Deadlift": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, lowerBack: 1, upperBack: 0.5, traps: 0.5, forearms: 0.5 }, athleticism: 0.4 },
+  "Overhead Press": { movement: "verticalPush", muscles: { frontDelts: 1, middleDelts: 0.5, triceps: 0.5 }, athleticism: 0.3 },
+  "Barbell Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 }, athleticism: 0.2 },
+  "Pull-Up": { movement: "verticalPull", muscles: { lats: 1, upperBack: 0.5, biceps: 0.5 }, athleticism: 0.3 },
+  "Chin-Up": { movement: "verticalPull", muscles: { lats: 1, biceps: 1, upperBack: 0.5 }, athleticism: 0.3 },
+  "Push-Up": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 }, athleticism: 0.2 },
+  "Dip": { movement: "verticalPush", muscles: { triceps: 1, chest: 0.5, frontDelts: 0.5 }, athleticism: 0.2 },
   "Lat Pulldown": { movement: "verticalPull", muscles: { lats: 1, upperBack: 0.5, biceps: 0.5 } },
   "Seated Cable Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5 } },
-  "Incline Bench Press": { movement: "horizontalPush", muscles: { chest: 1, frontDelts: 0.5, triceps: 0.5 } },
-  "Dumbbell Bench Press": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 } },
-  "Dumbbell Shoulder Press": { movement: "verticalPush", muscles: { frontDelts: 1, middleDelts: 0.5, triceps: 0.5 } },
+  "Incline Bench Press": { movement: "horizontalPush", muscles: { chest: 1, frontDelts: 0.5, triceps: 0.5 }, athleticism: 0.2 },
+  "Dumbbell Bench Press": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 }, athleticism: 0.2 },
+  "Dumbbell Shoulder Press": { movement: "verticalPush", muscles: { frontDelts: 1, middleDelts: 0.5, triceps: 0.5 }, athleticism: 0.2 },
   "Dumbbell Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5 } },
   "Dumbbell Curl": { movement: "isolation", muscles: { biceps: 1, forearms: 0.5 } },
   "Barbell Curl": { movement: "isolation", muscles: { biceps: 1, forearms: 0.5 } },
   "Hammer Curl": { movement: "isolation", muscles: { biceps: 1, forearms: 0.5 } },
   "Tricep Pushdown": { movement: "isolation", muscles: { triceps: 1 } },
   "Skull Crusher": { movement: "isolation", muscles: { triceps: 1 } },
-  "Leg Press": { movement: "squat", muscles: { quadriceps: 1, glutes: 0.5, hamstrings: 0.5, adductors: 0.5 } },
+  "Leg Press": { movement: "squat", muscles: { quadriceps: 1, glutes: 0.5, hamstrings: 0.5, adductors: 0.5 }, athleticism: 0.2 },
   "Leg Curl": { movement: "isolation", muscles: { hamstrings: 1 } },
   "Leg Extension": { movement: "isolation", muscles: { quadriceps: 1 } },
-  "Romanian Deadlift": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, lowerBack: 0.5 } },
-  "Hip Thrust": { movement: "hinge", muscles: { glutes: 1, hamstrings: 0.5, abductors: 0.5 } },
-  "Walking Lunge": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5, hipFlexors: 0.5 } },
-  "Bulgarian Split Squat": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5 } },
+  "Romanian Deadlift": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, lowerBack: 0.5 }, athleticism: 0.3 },
+  "Hip Thrust": { movement: "hinge", muscles: { glutes: 1, hamstrings: 0.5, abductors: 0.5 }, athleticism: 0.3 },
+  "Walking Lunge": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5, hipFlexors: 0.5 }, athleticism: 0.3 },
+  "Bulgarian Split Squat": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5 }, athleticism: 0.3 },
   "Calf Raise": { movement: "isolation", muscles: { calves: 1 } },
   "Plank": { movement: "isolation", muscles: { abs: 1, obliques: 0.5 } },
   "Hanging Leg Raise": { movement: "isolation", muscles: { abs: 1, hipFlexors: 1, obliques: 0.5 } },
   "Side Plank": { movement: "isolation", muscles: { obliques: 1, abs: 0.5 } },
   "Bird Dog": { movement: "isolation", muscles: { lowerBack: 1, abs: 0.5, glutes: 0.5 } },
-  "Sumo Deadlift": { movement: "hinge", muscles: { adductors: 1, glutes: 1, hamstrings: 0.5, lowerBack: 0.5, quadriceps: 0.5 } },
+  "Sumo Deadlift": { movement: "hinge", muscles: { adductors: 1, glutes: 1, hamstrings: 0.5, lowerBack: 0.5, quadriceps: 0.5 }, athleticism: 0.4 },
   "Hip Adduction Machine": { movement: "isolation", muscles: { adductors: 1 } },
   "Hip Abduction Machine": { movement: "isolation", muscles: { abductors: 1 } },
   "Standing Cable Hip Flexion": { movement: "isolation", muscles: { hipFlexors: 1 } },
@@ -101,8 +108,37 @@ export const BUILTIN_EXERCISES = {
   "Lateral Raise": { movement: "isolation", muscles: { middleDelts: 1 } },
   "Front Raise": { movement: "isolation", muscles: { frontDelts: 1 } },
   "Shrug": { movement: "isolation", muscles: { traps: 1 } },
-  "Good Morning": { movement: "hinge", muscles: { hamstrings: 1, lowerBack: 1, glutes: 0.5 } },
-  "Farmer's Carry": { movement: "isolation", muscles: { forearms: 1, traps: 0.5, abs: 0.5 } },
+  "Good Morning": { movement: "hinge", muscles: { hamstrings: 1, lowerBack: 1, glutes: 0.5 }, athleticism: 0.3 },
+  "Farmer's Carry": { movement: "isolation", muscles: { forearms: 1, traps: 0.5, abs: 0.5 }, athleticism: 0.4 },
+};
+
+// Explosive/power movements -- jumps, throws, Olympic lifts, and similar --
+// pre-seeded per an explicit request to track "Athleticism" as its own
+// thing, distinct from ordinary strength volume. Weighted well above the
+// compound-lift range above (1.0-2.0) since these specifically train
+// power/speed/coordination rather than just moving load. Movement-pattern
+// tags are the closest biomechanical fit (a box jump is squat-pattern, a
+// clean is hinge-pattern); a few genuinely don't fit push/pull/squat/
+// hinge/lunge (sprints, burpees) and stay "isolation", same precedent as
+// the cardio-finisher entries above (Row/Jog).
+const ATHLETICISM_EXERCISES = {
+  "Box Jump": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, calves: 0.5 }, athleticism: 1.5 },
+  "Broad Jump": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5 }, athleticism: 1.5 },
+  "Depth Jump": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, calves: 0.5 }, athleticism: 1.8 },
+  "Jump Squat": { movement: "squat", muscles: { quadriceps: 1, glutes: 1 }, athleticism: 1.2 },
+  "Tuck Jump": { movement: "squat", muscles: { quadriceps: 1, calves: 0.5, abs: 0.5 }, athleticism: 1.3 },
+  "Medicine Ball Slam": { movement: "isolation", muscles: { abs: 1, obliques: 0.5, lats: 0.5 }, athleticism: 1.3 },
+  "Medicine Ball Chest Throw": { movement: "horizontalPush", muscles: { chest: 1, frontDelts: 0.5, triceps: 0.5 }, athleticism: 1.3 },
+  "Medicine Ball Rotational Throw": { movement: "isolation", muscles: { obliques: 1, abs: 0.5 }, athleticism: 1.3 },
+  "Clean": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, upperBack: 0.5, quadriceps: 0.5 }, athleticism: 1.8 },
+  "Snatch": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, frontDelts: 0.5, quadriceps: 0.5 }, athleticism: 2 },
+  "Clean and Jerk": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, frontDelts: 0.5, quadriceps: 0.5 }, athleticism: 2 },
+  "Jerk": { movement: "verticalPush", muscles: { frontDelts: 1, triceps: 0.5, quadriceps: 0.5 }, athleticism: 1.8 },
+  "Push Press": { movement: "verticalPush", muscles: { frontDelts: 1, triceps: 0.5, quadriceps: 0.3 }, athleticism: 1 },
+  "Kettlebell Swing": { movement: "hinge", muscles: { glutes: 1, hamstrings: 1, lowerBack: 0.5 }, athleticism: 1 },
+  "Sprint": { movement: "isolation", muscles: { quadriceps: 0.5, hamstrings: 1, glutes: 0.5, calves: 0.5 }, athleticism: 1.5 },
+  "Burpee": { movement: "isolation", muscles: { chest: 0.5, quadriceps: 0.5, abs: 0.5 }, athleticism: 1 },
+  "Battle Ropes": { movement: "isolation", muscles: { frontDelts: 0.5, abs: 0.5, forearms: 0.5 }, athleticism: 1 },
 };
 
 // Names seen in real imports (mostly Boostcamp) that don't have a close
@@ -125,9 +161,9 @@ const EXTRA_EXERCISES = {
   "Jog": { movement: "isolation", muscles: { quadriceps: 0.5, hamstrings: 0.5, calves: 1 } },
 };
 
-export const EMPTY_META = { movement: "isolation", muscles: {} };
+export const EMPTY_META = { movement: "isolation", muscles: {}, athleticism: 0 };
 
-const ALL_EXERCISES = { ...BUILTIN_EXERCISES, ...EXTRA_EXERCISES };
+const ALL_EXERCISES = { ...BUILTIN_EXERCISES, ...ATHLETICISM_EXERCISES, ...EXTRA_EXERCISES };
 
 function normKey(name) {
   return name.trim().toLowerCase();
@@ -155,6 +191,17 @@ const ALIASES = {
   "single leg calf raise": "Calf Raise",
   "push up": "Push-Up",
   "standing shoulder press": "Dumbbell Shoulder Press",
+  "hang clean": "Clean",
+  "power clean": "Clean",
+  "squat clean": "Clean",
+  "hang snatch": "Snatch",
+  "power snatch": "Snatch",
+  "split jerk": "Jerk",
+  "push jerk": "Jerk",
+  "sprints": "Sprint",
+  "burpees": "Burpee",
+  "med ball slam": "Medicine Ball Slam",
+  "wall ball": "Medicine Ball Chest Throw",
 };
 
 /**
