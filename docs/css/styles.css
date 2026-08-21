@@ -140,6 +140,22 @@ main#content { padding: 16px 16px 60px; }
 .trend-svg .legend-text { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
 .chart-empty { color: var(--text-muted); font-size: 13px; padding: 30px; text-align: center; }
 
+/* ---------- Sleep stage breakdown ---------- */
+.sleep-stages { margin-top: 12px; }
+.sleep-stage-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
+.sleep-stage-seg { height: 100%; }
+.sleep-stage-seg.stage-deep { background: var(--series-1); }
+.sleep-stage-seg.stage-light { background: var(--series-1); opacity: 0.55; }
+.sleep-stage-seg.stage-rem { background: var(--series-3); }
+.sleep-stage-seg.stage-awake { background: var(--surface-3); border-right: 1px solid var(--border); }
+.sleep-stage-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.sleep-stage-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.sleep-stage-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.sleep-stage-dot.stage-deep { background: var(--series-1); }
+.sleep-stage-dot.stage-light { background: var(--series-1); opacity: 0.55; }
+.sleep-stage-dot.stage-rem { background: var(--series-3); }
+.sleep-stage-dot.stage-awake { background: var(--text-muted); }
+
 /* ---------- Search ---------- */
 .search-card { display: flex; flex-direction: column; gap: 8px; }
 #searchResults:empty { display: none; }

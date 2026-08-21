@@ -72,7 +72,9 @@ export async function loadDashboard(days) {
   const [dailyRes, activitiesRes, workoutsRes, syncRes] = await Promise.all([
     supabase
       .from("garmin_daily_stats")
-      .select("date, resting_hr, body_battery_high, body_battery_low, avg_stress, steps, sleep_seconds")
+      .select(
+        "date, resting_hr, body_battery_high, body_battery_low, avg_stress, steps, sleep_seconds, deep_sleep_seconds, light_sleep_seconds, rem_sleep_seconds, awake_seconds"
+      )
       .gte("date", startISO)
       .lte("date", endISO)
       .order("date", { ascending: true }),
@@ -148,6 +150,7 @@ export async function loadDashboard(days) {
     daily.map((d) => ({ x: new Date(d.date), y: d.sleep_seconds != null ? +(d.sleep_seconds / 3600).toFixed(1) : null })),
     { emptyMessage: "No sleep data yet." }
   );
+  renderSleepStages(daily);
 
   // Strength volume: working sets per week
   const weeklySets = {};
@@ -239,5 +242,57 @@ function renderHeatmap({ start, end, workouts, activities }) {
     }
     el.appendChild(col);
   }
+}
+
+// Period-average sleep stage breakdown (deep/light/REM/awake), as a single
+// stacked bar -- Garmin already syncs the per-stage seconds, this was just
+// never charted. A stacked bar was more honest here than trying to plot
+// four stacked series over time in the existing line-chart component.
+function renderSleepStages(daily) {
+  const el = $("#sleepStages");
+  if (!el) return;
+  el.innerHTML = "";
+
+  const stages = [
+    { key: "deep_sleep_seconds", label: "Deep", cls: "stage-deep" },
+    { key: "light_sleep_seconds", label: "Light", cls: "stage-light" },
+    { key: "rem_sleep_seconds", label: "REM", cls: "stage-rem" },
+    { key: "awake_seconds", label: "Awake", cls: "stage-awake" },
+  ];
+
+  const avgSeconds = {};
+  let anyData = false;
+  stages.forEach(({ key }) => {
+    const vals = daily.map((d) => d[key]).filter((v) => v != null);
+    avgSeconds[key] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    if (vals.length) anyData = true;
+  });
+
+  if (!anyData) {
+    el.innerHTML = `<p class="chart-empty">No sleep stage data yet.</p>`;
+    return;
+  }
+
+  const total = stages.reduce((sum, s) => sum + avgSeconds[s.key], 0) || 1;
+  const fmtHrs = (sec) => (sec / 3600).toFixed(1);
+
+  const bar = document.createElement("div");
+  bar.className = "sleep-stage-bar";
+  stages.forEach(({ key, cls }) => {
+    const pct = (avgSeconds[key] / total) * 100;
+    if (pct <= 0) return;
+    const seg = document.createElement("div");
+    seg.className = `sleep-stage-seg ${cls}`;
+    seg.style.width = `${pct}%`;
+    bar.appendChild(seg);
+  });
+  el.appendChild(bar);
+
+  const legend = document.createElement("div");
+  legend.className = "sleep-stage-legend";
+  legend.innerHTML = stages
+    .map(({ key, label, cls }) => `<span class="sleep-stage-legend-item"><span class="sleep-stage-dot ${cls}"></span>${label} ${fmtHrs(avgSeconds[key])}h</span>`)
+    .join("");
+  el.appendChild(legend);
 }
 
