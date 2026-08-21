@@ -61,15 +61,13 @@ def parse_ts(s):
     return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--overlap-threshold", type=float, default=0.9)
-    parser.add_argument("--grace-min", type=float, default=15)
-    parser.add_argument("--reset", action="store_true", help="Delete all existing links before recomputing")
-    args = parser.parse_args()
-    grace = dt.timedelta(minutes=args.grace_min)
+def run_linking(overlap_threshold=0.9, grace_min=15, reset=False):
+    """Callable version of the CLI below -- garmin_sync.py imports this to
+    relink automatically after every real sync, instead of requiring a
+    separate manual run."""
+    grace = dt.timedelta(minutes=grace_min)
 
-    if args.reset:
+    if reset:
         r = requests.delete(
             f"{SUPABASE_URL}/rest/v1/workout_links?garmin_activity_id=gt.0",
             headers=HEADERS,
@@ -112,7 +110,7 @@ def main():
                 if overlap <= 0:
                     continue
                 confidence = min(1.0, overlap / fw_duration)
-                if confidence >= args.overlap_threshold:
+                if confidence >= overlap_threshold:
                     if not best or confidence > best[0]:
                         best = (confidence, "overlap", a["id"])
             else:
@@ -156,6 +154,16 @@ def main():
 
     print(f"Linked {len(deduped)} new pair(s) ({len(new_links) - len(deduped)} dropped as duplicate-activity conflicts).")
     print(f"{len(unmatched)} workout(s) had no matching Garmin activity.")
+    return len(deduped), len(unmatched)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--overlap-threshold", type=float, default=0.9)
+    parser.add_argument("--grace-min", type=float, default=15)
+    parser.add_argument("--reset", action="store_true", help="Delete all existing links before recomputing")
+    args = parser.parse_args()
+    run_linking(overlap_threshold=args.overlap_threshold, grace_min=args.grace_min, reset=args.reset)
 
 
 if __name__ == "__main__":

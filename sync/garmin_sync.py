@@ -253,6 +253,16 @@ def main():
     upsert("sync_state", [{"key": "last_sync_at", "value": dt.datetime.now(dt.UTC).isoformat()}], on_conflict="key")
     print("Done.")
 
+    print("Linking new activities to logged workouts...")
+    try:
+        import link_workouts
+
+        link_workouts.run_linking()
+    except Exception as e:
+        # Never let a linking hiccup fail the sync itself -- the health/
+        # activity data above is already safely saved at this point.
+        print(f"  ! linking step failed (sync itself still succeeded): {e}", file=sys.stderr)
+
 
 if __name__ == "__main__":
     main()
