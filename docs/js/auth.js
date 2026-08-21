@@ -9,6 +9,17 @@ const $ = (sel) => document.querySelector(sel);
 const ACCOUNT_EMAIL = "carlos.alvarez9@upr.edu";
 const PIN_PATTERN = /^\d{6}$/;
 
+// Supabase's project-level password policy requires more than 8 characters
+// (confirmed by the actual rejection: a bare 6-digit PIN doesn't clear it,
+// and that's a project auth setting, not something this client-side code
+// controls). Rather than change that policy or drop to a real password
+// field, pad the PIN into something that satisfies it before it ever
+// reaches Supabase -- the UI still only asks for 6 digits either way, and
+// the fixed pad isn't the secret, the PIN still is.
+function toSupabasePassword(pin) {
+  return `fit-${pin}-dash`;
+}
+
 export function initAuth({ onSignedIn, onSignedOut }) {
   let inRecovery = false;
 
@@ -46,7 +57,7 @@ export function initAuth({ onSignedIn, onSignedOut }) {
 
     $("#loginBtn").disabled = true;
     $("#loginBtn").textContent = "Signing in…";
-    const { error } = await supabase.auth.signInWithPassword({ email: ACCOUNT_EMAIL, password: pin });
+    const { error } = await supabase.auth.signInWithPassword({ email: ACCOUNT_EMAIL, password: toSupabasePassword(pin) });
     $("#loginBtn").disabled = false;
     $("#loginBtn").textContent = "Sign in";
 
@@ -77,7 +88,7 @@ export function initAuth({ onSignedIn, onSignedOut }) {
 
     $("#recoveryBtn").disabled = true;
     $("#recoveryBtn").textContent = "Saving…";
-    const { error } = await supabase.auth.updateUser({ password: p1 });
+    const { error } = await supabase.auth.updateUser({ password: toSupabasePassword(p1) });
     $("#recoveryBtn").disabled = false;
     $("#recoveryBtn").textContent = "Set PIN";
 
