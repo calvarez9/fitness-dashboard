@@ -260,6 +260,11 @@ main#content { padding: 16px 16px 60px; }
 .edit-segment-grid .edit-field.wide { grid-column: 1 / -1; }
 .icon-btn.danger { background: var(--critical); color: #fff; }
 
+/* ---------- Exercise Library form (mirrors FitLog's own) ---------- */
+.muscle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+.muscle-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.muscle-check input { width: 16px; height: 16px; }
+
 /* ---------- Body map (ported from FitLog) ---------- */
 .bodymap-row { display: flex; justify-content: center; gap: 18px; margin-bottom: 14px; }
 .bodymap-figure { flex: 1; max-width: 150px; text-align: center; margin: 0; }

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821p" />
+<link rel="stylesheet" href="css/styles.css?v=20260821q" />
 </head>
 <body>
 <div id="app">
@@ -59,6 +59,7 @@
         <button type="button" class="tab-btn" data-tab="health">Health</button>
         <button type="button" class="tab-btn" data-tab="training">Training</button>
         <button type="button" class="tab-btn" data-tab="calendar">Calendar</button>
+        <button type="button" class="tab-btn" data-tab="library">Library</button>
       </nav>
 
       <!-- ===== HEALTH ===== -->
@@ -227,6 +228,28 @@
 
       </div>
 
+      <!-- ===== LIBRARY ===== -->
+      <div class="tab-panel" data-tab="library" hidden>
+
+        <section class="chart-section" id="libraryListSection">
+          <div class="cal-header">
+            <h2>Exercise Library</h2>
+            <button type="button" class="btn secondary small" id="newExerciseBtn">+ Add Exercise</button>
+          </div>
+          <div class="chart-card">
+            <div id="libraryList" class="workout-list"></div>
+          </div>
+        </section>
+
+        <section class="chart-section" id="libraryFormSection" hidden>
+          <div class="chart-card">
+            <div id="libraryFormBody"></div>
+          </div>
+          <button type="button" class="btn ghost small" id="libraryFormBackBtn">‹ Back to Library</button>
+        </section>
+
+      </div>
+
       <p class="muted small footer-note">Last synced: <span id="lastSynced">—</span></p>
 
     </main>
@@ -263,6 +286,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821p"></script>
+<script type="module" src="js/app.js?v=20260821q"></script>
 </body>
 </html>

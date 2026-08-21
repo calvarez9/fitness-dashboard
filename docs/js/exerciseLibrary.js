@@ -204,6 +204,36 @@ const ALIASES = {
   "wall ball": "Medicine Ball Chest Throw",
 };
 
+// User-added/edited exercises, loaded from the exercise_overrides table at
+// app startup (see workouts.js#loadExerciseOverrides) and re-loaded after
+// any edit. A row here with an existing name overrides its builtin entry
+// (checked first, below); a new name adds a custom exercise -- the same
+// "override vs custom" model FitLog already uses locally, just synced
+// through Supabase here instead of localStorage.
+let OVERRIDES = new Map(); // normKey(name) -> { name, movement, muscles, athleticism }
+
+export function setExerciseOverrides(rows) {
+  OVERRIDES = new Map((rows || []).map((r) => [normKey(r.name), { name: r.name, movement: r.movement, muscles: r.muscles || {}, athleticism: r.athleticism || 0 }]));
+}
+
+export function getExerciseOverrides() {
+  return [...OVERRIDES.values()];
+}
+
+// Every known exercise -- builtins merged with overrides (override wins on
+// a name collision) -- for the Exercise Library view.
+export function getAllExerciseEntries() {
+  const merged = new Map();
+  Object.entries(ALL_EXERCISES).forEach(([name, meta]) => {
+    merged.set(normKey(name), { name, movement: meta.movement, muscles: meta.muscles || {}, athleticism: meta.athleticism || 0, isCustom: false, isOverride: false });
+  });
+  OVERRIDES.forEach((meta, key) => {
+    const isOverride = merged.has(key);
+    merged.set(key, { ...meta, isCustom: !isOverride, isOverride });
+  });
+  return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /**
  * Resolve movement pattern + muscle engagement for a logged exercise name,
  * tolerant of equipment suffixes ("Bench Press (Barbell)") and casing.
@@ -212,6 +242,9 @@ const ALIASES = {
  */
 export function resolveExerciseMeta(rawName) {
   if (!rawName) return { ...EMPTY_META, matched: false, canonicalName: rawName || "" };
+
+  const override = OVERRIDES.get(normKey(rawName));
+  if (override) return { movement: override.movement, muscles: override.muscles, athleticism: override.athleticism, matched: true, canonicalName: override.name };
 
   const direct = LOOKUP.get(normKey(rawName));
   if (direct) return { ...direct, matched: true, canonicalName: rawName };

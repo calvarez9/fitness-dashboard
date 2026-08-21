@@ -20,6 +20,7 @@ import {
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
 import { renderMetricDetail } from "./health.js";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -159,8 +160,34 @@ async function refreshOpenMetricPanels() {
   }
 }
 
+// ---------- Exercise Library ----------
+function showLibraryList() {
+  $("#libraryListSection").hidden = false;
+  $("#libraryFormSection").hidden = true;
+}
+
+function openExerciseEditor(name) {
+  $("#libraryListSection").hidden = true;
+  $("#libraryFormSection").hidden = false;
+  renderExerciseForm($("#libraryFormBody"), name, onLibraryChanged);
+}
+
+async function onLibraryChanged() {
+  showLibraryList();
+  renderLibraryList($("#libraryList"), openExerciseEditor);
+  toast("Saved ✓");
+  // Editing an exercise's movement/muscles/athleticism can change every
+  // downstream stat that reads it -- refresh those too, not just the list.
+  await refreshWorkouts(currentRangeDays());
+  await refreshPRBoard();
+}
+
 async function refresh() {
   try {
+    // Overrides must be loaded before anything computes movement/muscle/
+    // athleticism stats, since resolveExerciseMeta() checks them first.
+    await loadExerciseOverrides();
+    renderLibraryList($("#libraryList"), openExerciseEditor);
     await loadDashboard(currentRangeDays());
     await refreshWorkouts(currentRangeDays());
     await refreshPRBoard();
@@ -230,6 +257,9 @@ function initTabs() {
 function initDashboardUI() {
   initTabs();
   initHealthDetails();
+
+  $("#newExerciseBtn").addEventListener("click", () => openExerciseEditor(null));
+  $("#libraryFormBackBtn").addEventListener("click", showLibraryList);
 
   $("#rangeSelect").addEventListener("change", refresh);
 
