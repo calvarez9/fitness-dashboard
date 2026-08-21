@@ -137,6 +137,10 @@ def sync_day(garmin, date_str):
     row["avg_stress"] = stress.get("avgStressLevel")
     row["max_stress"] = stress.get("maxStressLevel")
 
+    # Always set these keys (even when None) — PostgREST's bulk upsert
+    # requires every object in a batch to have identical keys.
+    row["body_battery_high"] = None
+    row["body_battery_low"] = None
     if bb and isinstance(bb, list) and bb[0].get("bodyBatteryValuesArray"):
         values = [v[1] for v in bb[0]["bodyBatteryValuesArray"] if v and v[1] is not None]
         if values:
@@ -152,8 +156,7 @@ def sync_day(garmin, date_str):
     scores = daily_sleep.get("sleepScores") or {}
     row["sleep_score"] = (scores.get("overall") or {}).get("value")
 
-    if isinstance(hrv, dict):
-        row["avg_hrv"] = (hrv.get("hrvSummary") or {}).get("lastNightAvg")
+    row["avg_hrv"] = (hrv.get("hrvSummary") or {}).get("lastNightAvg") if isinstance(hrv, dict) else None
 
     row["respiration_avg"] = stats.get("avgWakingRespirationValue")
     row["raw"] = raw
