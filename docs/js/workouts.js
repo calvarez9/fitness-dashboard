@@ -2,7 +2,7 @@
 import { supabase } from "./supabaseClient.js";
 import { resolveExerciseMeta, MUSCLES, MOVEMENTS, MOVEMENT_LABEL } from "./exerciseLibrary.js";
 
-let cache = { workouts: [], setsByWorkout: new Map(), segmentsByWorkout: new Map() };
+let cache = { workouts: [], setsByWorkout: new Map(), segmentsByWorkout: new Map(), linkedActivityByWorkout: new Map() };
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -20,8 +20,9 @@ export async function loadWorkouts(start, end) {
   const ids = (workouts || []).map((w) => w.id);
   let sets = [];
   let segments = [];
+  let links = [];
   if (ids.length) {
-    const [setsRes, segRes] = await Promise.all([
+    const [setsRes, segRes, linksRes] = await Promise.all([
       supabase
         .from("fitlog_sets")
         .select("workout_id, exercise_name, set_index, reps, weight, rpe, is_warmup, done")
@@ -31,11 +32,22 @@ export async function loadWorkouts(start, end) {
         .from("fitlog_cardio_segments")
         .select("workout_id, activity_type, duration_min, distance, calories, avg_hr, max_hr")
         .in("workout_id", ids),
+      // workout_links may not exist yet (schema/005 not run) -- treat that
+      // as "no links" rather than breaking the whole workouts list.
+      supabase
+        .from("workout_links")
+        .select("fitlog_workout_id, garmin_activities(id, activity_name, activity_type, duration_seconds, avg_hr, max_hr, calories)")
+        .in("fitlog_workout_id", ids)
+        .then(
+          (r) => r,
+          () => ({ data: [], error: null })
+        ),
     ]);
     if (setsRes.error) throw setsRes.error;
     if (segRes.error) throw segRes.error;
     sets = setsRes.data || [];
     segments = segRes.data || [];
+    links = linksRes.error ? [] : linksRes.data || [];
   }
 
   const setsByWorkout = new Map();
@@ -48,8 +60,12 @@ export async function loadWorkouts(start, end) {
     if (!segmentsByWorkout.has(s.workout_id)) segmentsByWorkout.set(s.workout_id, []);
     segmentsByWorkout.get(s.workout_id).push(s);
   });
+  const linkedActivityByWorkout = new Map();
+  links.forEach((l) => {
+    if (l.garmin_activities) linkedActivityByWorkout.set(l.fitlog_workout_id, l.garmin_activities);
+  });
 
-  cache = { workouts: workouts || [], setsByWorkout, segmentsByWorkout };
+  cache = { workouts: workouts || [], setsByWorkout, segmentsByWorkout, linkedActivityByWorkout };
   return cache;
 }
 
@@ -74,13 +90,14 @@ export function renderWorkoutsList(container, onOpen) {
       sub = `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"} · ${workingSets} set${workingSets === 1 ? "" : "s"}`;
     }
 
+    const linked = cache.linkedActivityByWorkout.get(w.id);
     const row = document.createElement("button");
     row.type = "button";
     row.className = "workout-row";
     row.innerHTML = `
       <span class="workout-row-date">${dateLabel}</span>
       <span class="workout-row-main">
-        <span class="workout-row-name">${esc(w.name || (w.type === "cardio" ? "Cardio" : "Workout"))}</span>
+        <span class="workout-row-name">${esc(w.name || (w.type === "cardio" ? "Cardio" : "Workout"))}${linked ? ' <span class="linked-badge" title="Also recorded on Garmin">⌚</span>' : ""}</span>
         <span class="workout-row-sub">${esc(sub)}</span>
       </span>
       <span class="workout-type-badge ${w.type === "cardio" ? "cardio" : "strength"}">${w.type === "cardio" ? "cardio" : "strength"}</span>
@@ -91,11 +108,22 @@ export function renderWorkoutsList(container, onOpen) {
 }
 
 export function renderWorkoutDetail(container, id) {
-  container.innerHTML = "";
   const workout = cache.workouts.find((w) => w.id === id);
   if (!workout) return;
   const sets = cache.setsByWorkout.get(id) || [];
   const segments = cache.segmentsByWorkout.get(id) || [];
+  const linkedActivity = cache.linkedActivityByWorkout.get(id) || null;
+  renderWorkoutDetailData(container, workout, sets, segments, linkedActivity);
+}
+
+// Pure version of the above -- takes the workout + its children directly
+// instead of looking them up in this module's own range-scoped cache, so
+// other views (e.g. the calendar, which browses by month rather than the
+// dashboard's date-range selector) can reuse the exact same rendering.
+// linkedActivity (optional): a garmin_activities row matched to this
+// workout via workout_links, shown as a corroborating metrics line.
+export function renderWorkoutDetailData(container, workout, sets, segments, linkedActivity = null) {
+  container.innerHTML = "";
 
   const dateLabel = new Date(workout.date).toLocaleDateString(undefined, {
     weekday: "long",
@@ -107,6 +135,18 @@ export function renderWorkoutDetail(container, id) {
   header.className = "workout-detail-header";
   header.innerHTML = `<h4>${esc(workout.name || "Workout")}</h4><p class="muted small">${esc(dateLabel)}</p>`;
   container.appendChild(header);
+
+  if (linkedActivity) {
+    const bits = [];
+    if (linkedActivity.duration_seconds != null) bits.push(`${Math.round(linkedActivity.duration_seconds / 60)} min`);
+    if (linkedActivity.avg_hr != null) bits.push(`${linkedActivity.avg_hr} avg hr`);
+    if (linkedActivity.max_hr != null) bits.push(`${linkedActivity.max_hr} max hr`);
+    if (linkedActivity.calories != null) bits.push(`${linkedActivity.calories} cal`);
+    const garminNote = document.createElement("p");
+    garminNote.className = "muted small";
+    garminNote.textContent = `⌚ Recorded on Garmin (${linkedActivity.activity_name || linkedActivity.activity_type}): ${bits.join(" · ")}`;
+    container.appendChild(garminNote);
+  }
 
   if (workout.type === "cardio") {
     if (!segments.length) {

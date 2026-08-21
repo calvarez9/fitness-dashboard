@@ -56,6 +56,21 @@
       <section class="stat-row" id="statRow"></section>
 
       <section class="chart-section">
+        <div class="cal-header">
+          <h2>Calendar</h2>
+          <div class="cal-nav">
+            <button id="calPrev" class="icon-btn small" aria-label="Previous month">‹</button>
+            <span id="calMonthLabel" class="cal-month-label"></span>
+            <button id="calNext" class="icon-btn small" aria-label="Next month">›</button>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div id="calGrid" class="cal-grid"></div>
+          <div id="calDayDetail" class="workout-detail-body cal-day-detail"></div>
+        </div>
+      </section>
+
+      <section class="chart-section">
         <h2>Consistency</h2>
         <div class="chart-card">
           <div id="heatmap" class="heatmap"></div>

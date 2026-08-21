@@ -3,6 +3,7 @@ import { loadDashboard } from "./dashboard.js";
 import { importFitLogBackup } from "./importFitLog.js";
 import { renderBarList } from "./charts.js";
 import { loadWorkouts, renderWorkoutsList, renderWorkoutDetail, computeExerciseStats, computeMovementMuscleStats } from "./workouts.js";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel } from "./calendar.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -56,6 +57,29 @@ async function refresh() {
   }
 }
 
+// ---------- Calendar ----------
+let calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+async function refreshCalendar() {
+  $("#calMonthLabel").textContent = monthLabel(calMonth);
+  $("#calDayDetail").innerHTML = "";
+  try {
+    const { byDay } = await loadMonth(calMonth);
+    renderCalendarGrid($("#calGrid"), calMonth, byDay, async (dateKey, events) => {
+      await renderDayDetail($("#calDayDetail"), dateKey, events);
+      $$(".cal-day", $("#calGrid")).forEach((el) => el.classList.toggle("selected", el.dataset.date === dateKey));
+    });
+  } catch (e) {
+    console.error(e);
+    $("#calGrid").innerHTML = "";
+    toast("Couldn't load calendar — see console.");
+  }
+}
+
+function $$(sel, root = document) {
+  return root.querySelectorAll(sel);
+}
+
 function initDashboardUI() {
   $("#rangeSelect").addEventListener("change", refresh);
 
@@ -75,6 +99,16 @@ function initDashboardUI() {
   $("#workoutModal").addEventListener("click", (e) => {
     if (e.target === $("#workoutModal")) $("#workoutModal").hidden = true;
   });
+
+  $("#calPrev").addEventListener("click", () => {
+    calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
+    refreshCalendar();
+  });
+  $("#calNext").addEventListener("click", () => {
+    calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
+    refreshCalendar();
+  });
+  refreshCalendar();
 
   $("#importGoBtn").addEventListener("click", async () => {
     const file = $("#importFile").files[0];
