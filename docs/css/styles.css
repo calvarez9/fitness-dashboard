@@ -101,6 +101,17 @@ main#content { padding: 16px 16px 60px; }
 .stat-tile .stat-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 .stat-tile .stat-delta { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 
+/* ---------- Tabs ---------- */
+.tab-nav {
+  display: flex; gap: 4px; background: var(--surface-3); border-radius: var(--radius-m);
+  padding: 4px; margin-bottom: 20px;
+}
+.tab-btn {
+  flex: 1; font-family: var(--font); font-size: 13px; font-weight: 600; padding: 9px 10px;
+  border: none; background: none; color: var(--text-secondary); border-radius: var(--radius-s); cursor: pointer;
+}
+.tab-btn.active { background: var(--surface-1); color: var(--text-primary); }
+
 .chart-section { margin-bottom: 24px; }
 .chart-section h2 { font-size: 14px; font-weight: 700; margin: 0 0 8px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
 .chart-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-m); padding: 10px; }
@@ -222,6 +233,7 @@ main#content { padding: 16px 16px 60px; }
   padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;
 }
 .exercise-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.day-health-summary { background: none; border-style: dashed; }
 .set-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
 .set-row .set-marker { flex: none; width: 14px; text-align: center; color: var(--text-muted); font-weight: 700; }
 .set-row.warmup { color: var(--text-muted); }
@@ -265,6 +277,13 @@ main#content { padding: 16px 16px 60px; }
 .bar-fill { height: 100%; border-radius: 999px; background: var(--series-1); }
 .bar-row.clickable { display: block; width: 100%; background: none; border: none; padding: 4px 6px; margin: -4px -6px; border-radius: var(--radius-s); cursor: pointer; font-family: var(--font); text-align: left; }
 .bar-row.clickable:hover { background: var(--surface-3); }
+.bar-row-group .bar-label { font-weight: 700; }
+.bar-row-child { opacity: 0.85; }
+/* Beats .bar-row.clickable's `margin` shorthand (which also sets margin-left)
+   on specificity for this one longhand property, without touching the rest. */
+.bar-row.clickable.bar-row-child { margin-left: 12px; }
+.bar-row-child .bar-label { font-weight: 500; font-size: 12px; color: var(--text-secondary); }
+.bar-row-child .bar-track { height: 6px; }
 
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);

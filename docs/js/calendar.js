@@ -39,15 +39,18 @@ async function loadLinks() {
 }
 
 /**
- * Loads every fitlog_workout + garmin_activity in the given month and
- * groups them by day. Garmin activities linked to a fitlog_workout are
- * folded into that workout's entry instead of appearing separately.
+ * Loads every fitlog_workout + garmin_activity + garmin_daily_stats in the
+ * given month and groups them by day. Garmin activities linked to a
+ * fitlog_workout are folded into that workout's entry instead of
+ * appearing separately.
  */
 export async function loadMonth(monthDate) {
   const start = startOfMonth(monthDate);
   const end = endOfMonth(monthDate);
+  const startISO = isoDate(start);
+  const endISO = isoDate(end);
 
-  const [workoutsRes, activitiesRes, links] = await Promise.all([
+  const [workoutsRes, activitiesRes, dailyRes, links] = await Promise.all([
     supabase
       .from("fitlog_workouts")
       .select("id, date, name, type, notes")
@@ -58,13 +61,20 @@ export async function loadMonth(monthDate) {
       .select("id, activity_name, activity_type, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories")
       .gte("start_time", start.toISOString())
       .lte("start_time", end.toISOString()),
+    supabase
+      .from("garmin_daily_stats")
+      .select("date, resting_hr, avg_stress, body_battery_high, body_battery_low, sleep_seconds, steps")
+      .gte("date", startISO)
+      .lte("date", endISO),
     loadLinks(),
   ]);
   if (workoutsRes.error) throw workoutsRes.error;
   if (activitiesRes.error) throw activitiesRes.error;
+  if (dailyRes.error) throw dailyRes.error;
 
   const workouts = workoutsRes.data || [];
   const activities = activitiesRes.data || [];
+  const dailyByDate = new Map((dailyRes.data || []).map((d) => [d.date, d]));
 
   const activityById = new Map(activities.map((a) => [a.id, a]));
   const linkedGarminIds = new Set(links.map((l) => l.garmin_activity_id));
@@ -87,7 +97,7 @@ export async function loadMonth(monthDate) {
     bump(a.start_time, { kind: "activity", activity: a });
   });
 
-  return { start, end, byDay };
+  return { start, end, byDay, dailyByDate };
 }
 
 export function renderCalendarGrid(container, monthDate, byDay, onDayClick) {
@@ -141,11 +151,12 @@ function eventSummary(ev) {
  * Renders full detail for every event on a day directly inline (no further
  * click needed) -- a day usually has at most a workout and maybe its
  * linked Garmin corroboration, so there's rarely anything to drill into.
+ * dailyStats: this day's garmin_daily_stats row, or null/undefined.
  * onSaved(): called after an edit/delete inside this view is saved, so the
  * caller can reload the month (invalidates linksCache too, in case a
  * linked activity's workout was deleted or its date changed).
  */
-export async function renderDayDetail(container, dateKey, events, onSaved) {
+export async function renderDayDetail(container, dateKey, events, dailyStats, onSaved) {
   container.innerHTML = "";
 
   const label = new Date(`${dateKey}T12:00:00`).toLocaleDateString(undefined, {
@@ -158,6 +169,23 @@ export async function renderDayDetail(container, dateKey, events, onSaved) {
   header.className = "workout-detail-header";
   header.innerHTML = `<h4>${esc(label)}</h4>`;
   container.appendChild(header);
+
+  if (dailyStats) {
+    const bits = [];
+    if (dailyStats.resting_hr != null) bits.push(`${dailyStats.resting_hr} bpm resting`);
+    if (dailyStats.sleep_seconds != null) bits.push(`${(dailyStats.sleep_seconds / 3600).toFixed(1)}h sleep`);
+    if (dailyStats.avg_stress != null) bits.push(`${dailyStats.avg_stress} avg stress`);
+    if (dailyStats.body_battery_high != null || dailyStats.body_battery_low != null) {
+      bits.push(`${dailyStats.body_battery_low ?? "?"}–${dailyStats.body_battery_high ?? "?"} battery`);
+    }
+    if (dailyStats.steps != null) bits.push(`${dailyStats.steps.toLocaleString()} steps`);
+    if (bits.length) {
+      const healthCard = document.createElement("div");
+      healthCard.className = "exercise-block day-health-summary";
+      healthCard.innerHTML = `<div class="exercise-name">Health</div><div class="muted small">${esc(bits.join(" · "))}</div>`;
+      container.appendChild(healthCard);
+    }
+  }
 
   if (!events.length) {
     const p = document.createElement("p");

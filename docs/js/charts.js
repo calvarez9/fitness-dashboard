@@ -120,13 +120,18 @@ export function renderBarList(container, rows, opts = {}) {
     container.appendChild(div);
     return;
   }
+  // Group/child rows (e.g. Push containing Vertical/Horizontal Push) scale
+  // against the top-level max only, so a child's bar reads as its share of
+  // its own group rather than competing on the same scale as the groups.
+  const topLevelMax = Math.max(...rows.filter((r) => !r.isChild).map((r) => r.value), 0);
   const max = Math.max(...rows.map((r) => r.value), 0);
   rows.forEach((r) => {
     const clickable = !!opts.onClick;
     const row = document.createElement(clickable ? "button" : "div");
     if (clickable) row.type = "button";
-    row.className = "bar-row" + (clickable ? " clickable" : "");
-    const pct = max > 0 ? Math.max(4, (r.value / max) * 100) : 0;
+    row.className = "bar-row" + (clickable ? " clickable" : "") + (r.isGroup ? " bar-row-group" : "") + (r.isChild ? " bar-row-child" : "");
+    const scale = r.isChild ? topLevelMax : max;
+    const pct = scale > 0 ? Math.max(4, (r.value / scale) * 100) : 0;
     const valueText = typeof r.value === "number" ? r.value.toLocaleString(undefined, { maximumFractionDigits: 1 }) : r.value;
     row.innerHTML = `
       <div class="bar-row-top">

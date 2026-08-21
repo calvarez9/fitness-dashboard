@@ -1,6 +1,6 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
-import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL } from "./exerciseLibrary.js";
+import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL, MOVEMENT_GROUPS } from "./exerciseLibrary.js";
 import { renderBarList, renderProgressChart } from "./charts.js";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
@@ -562,6 +562,37 @@ export function computeExerciseStats(limit = 10) {
     .slice(0, limit);
 }
 
+// Push/Pull get a combined total row plus their vertical/horizontal
+// children right underneath; Squat/Hinge/Lunge stay as plain standalone
+// rows. Top-level items (groups + standalone) are ranked together by
+// volume; each group's children are ranked among themselves.
+function buildMovementRows(movementTotals) {
+  const groupedKeys = new Set(MOVEMENT_GROUPS.flatMap((g) => g.members));
+  const topLevel = [];
+
+  MOVEMENT_GROUPS.forEach((g) => {
+    const total = g.members.reduce((sum, k) => sum + (movementTotals[k] || 0), 0);
+    if (total > 0) topLevel.push({ type: "group", key: g.key, label: g.label, value: round(total), members: g.members });
+  });
+  MOVEMENTS.forEach((m) => {
+    if (groupedKeys.has(m.key)) return;
+    if (movementTotals[m.key] > 0) topLevel.push({ type: "single", key: m.key, label: MOVEMENT_LABEL[m.key], value: round(movementTotals[m.key]) });
+  });
+  topLevel.sort((a, b) => b.value - a.value);
+
+  const rows = [];
+  topLevel.forEach((item) => {
+    rows.push({ key: item.key, label: item.label, value: item.value, isGroup: item.type === "group" });
+    if (item.type === "group") {
+      item.members
+        .filter((k) => movementTotals[k] > 0)
+        .sort((a, b) => movementTotals[b] - movementTotals[a])
+        .forEach((k) => rows.push({ key: k, label: MOVEMENT_LABEL[k], value: round(movementTotals[k]), isChild: true }));
+    }
+  });
+  return rows;
+}
+
 export function computeMovementMuscleStats() {
   const movementTotals = Object.fromEntries(MOVEMENTS.map((m) => [m.key, 0]));
   const muscleTotals = Object.fromEntries(MUSCLES.map((m) => [m.key, 0]));
@@ -579,9 +610,7 @@ export function computeMovementMuscleStats() {
     });
   }
 
-  const movementRows = MOVEMENTS.map((m) => ({ key: m.key, label: MOVEMENT_LABEL[m.key], value: round(movementTotals[m.key]) }))
-    .filter((r) => r.value > 0)
-    .sort((a, b) => b.value - a.value);
+  const movementRows = buildMovementRows(movementTotals);
 
   const muscleRows = MUSCLES.map((m) => ({ key: m.key, label: m.label, value: round(muscleTotals[m.key]) }))
     .filter((r) => r.value > 0)
@@ -702,18 +731,25 @@ export function renderExerciseDetail(container, exerciseName, onOpenWorkout) {
   });
 }
 
-export function renderMovementDetail(container, movementKey, onOpenExercise) {
+// Accepts either a single movement key ("verticalPush") or one of
+// MOVEMENT_GROUPS's pseudo-keys ("push"), in which case it aggregates
+// across that group's members (vertical + horizontal push).
+export function renderMovementDetail(container, movementKeyOrGroup, onOpenExercise) {
+  const group = MOVEMENT_GROUPS.find((g) => g.key === movementKeyOrGroup);
+  const keys = group ? group.members : [movementKeyOrGroup];
+  const label = group ? group.label : MOVEMENT_LABEL[movementKeyOrGroup] || movementKeyOrGroup;
+
   container.innerHTML = "";
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>${esc(MOVEMENT_LABEL[movementKey] || movementKey)}</h4>`;
+  header.innerHTML = `<h4>${esc(label)}</h4>`;
   container.appendChild(header);
 
   const totals = new Map(); // exercise_name -> sets
   for (const sets of cache.setsByWorkout.values()) {
     sets.forEach((s) => {
       if (s.is_warmup) return;
-      if (resolveExerciseMeta(s.exercise_name).movement !== movementKey) return;
+      if (!keys.includes(resolveExerciseMeta(s.exercise_name).movement)) return;
       totals.set(s.exercise_name, (totals.get(s.exercise_name) || 0) + 1);
     });
   }

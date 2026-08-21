@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821g" />
+<link rel="stylesheet" href="css/styles.css?v=20260821h" />
 </head>
 <body>
 <div id="app">
@@ -55,137 +55,158 @@
 
       <section class="stat-row" id="statRow"></section>
 
-      <section class="chart-section">
-        <div class="chart-card search-card">
-          <input id="searchInput" type="search" placeholder="Search an exercise…" autocomplete="off" />
-          <div id="searchResults" class="workout-list"></div>
-        </div>
-      </section>
+      <nav class="tab-nav" id="tabNav">
+        <button type="button" class="tab-btn" data-tab="health">Health</button>
+        <button type="button" class="tab-btn" data-tab="training">Training</button>
+        <button type="button" class="tab-btn" data-tab="calendar">Calendar</button>
+      </nav>
 
-      <section class="chart-section">
-        <div class="cal-header">
-          <h2>Calendar</h2>
-          <div class="cal-nav">
-            <button id="calPrev" class="icon-btn small" aria-label="Previous month">‹</button>
-            <span id="calMonthLabel" class="cal-month-label"></span>
-            <button id="calNext" class="icon-btn small" aria-label="Next month">›</button>
+      <!-- ===== HEALTH ===== -->
+      <div class="tab-panel" data-tab="health" hidden>
+
+        <section class="chart-section">
+          <h2>Recovery</h2>
+          <div class="chart-card">
+            <div id="recoveryComparison"></div>
+            <p class="muted small">Training days = any day with a logged workout or Garmin activity.</p>
           </div>
-        </div>
-        <div class="chart-card">
-          <div id="calGrid" class="cal-grid"></div>
-          <div id="calDayDetail" class="workout-detail-body cal-day-detail"></div>
-        </div>
-      </section>
+        </section>
 
-      <section class="chart-section">
-        <h2>Consistency</h2>
-        <div class="chart-card">
-          <div id="heatmap" class="heatmap"></div>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Recovery</h2>
-        <div class="chart-card">
-          <div id="recoveryComparison"></div>
-          <p class="muted small">Training days = any day with a logged workout or Garmin activity.</p>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Resting Heart Rate</h2>
-        <div class="chart-card">
-          <svg id="chartRhr" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Body Battery</h2>
-        <div class="chart-card">
-          <svg id="chartBattery" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Stress</h2>
-        <div class="chart-card">
-          <svg id="chartStress" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Steps</h2>
-        <div class="chart-card">
-          <svg id="chartSteps" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Sleep Duration</h2>
-        <div class="chart-card">
-          <svg id="chartSleep" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Strength Volume (sets/week)</h2>
-        <div class="chart-card">
-          <svg id="chartStrength" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Workouts</h2>
-        <div class="chart-card">
-          <div id="workoutsList" class="workout-list"></div>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Personal Records</h2>
-        <div class="chart-card">
-          <div id="prBoard" class="workout-list"></div>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Top Exercises</h2>
-        <div class="chart-card">
-          <div id="barExercises" class="bar-list"></div>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Movement Pattern Volume</h2>
-        <div class="chart-card">
-          <div id="barMovements" class="bar-list"></div>
-        </div>
-      </section>
-
-      <section class="chart-section">
-        <h2>Muscle Volume</h2>
-        <div class="chart-card">
-          <div class="bodymap-row">
-            <figure class="bodymap-figure">
-              <svg id="bodyFront"></svg>
-              <figcaption>Front</figcaption>
-            </figure>
-            <figure class="bodymap-figure">
-              <svg id="bodyBack"></svg>
-              <figcaption>Back</figcaption>
-            </figure>
+        <section class="chart-section">
+          <h2>Resting Heart Rate</h2>
+          <div class="chart-card">
+            <svg id="chartRhr" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
           </div>
-          <div id="barMuscles" class="bar-list"></div>
-          <p id="unmatchedNote" class="muted small" hidden></p>
-        </div>
-      </section>
+        </section>
 
-      <section class="chart-section">
-        <h2>Cardio Distance/Week</h2>
-        <div class="chart-card">
-          <svg id="chartCardio" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </section>
+        <section class="chart-section">
+          <h2>Body Battery</h2>
+          <div class="chart-card">
+            <svg id="chartBattery" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Stress</h2>
+          <div class="chart-card">
+            <svg id="chartStress" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Steps</h2>
+          <div class="chart-card">
+            <svg id="chartSteps" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Sleep Duration</h2>
+          <div class="chart-card">
+            <svg id="chartSleep" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ===== TRAINING ===== -->
+      <div class="tab-panel" data-tab="training" hidden>
+
+        <section class="chart-section">
+          <div class="chart-card search-card">
+            <input id="searchInput" type="search" placeholder="Search an exercise…" autocomplete="off" />
+            <div id="searchResults" class="workout-list"></div>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Strength Volume (sets/week)</h2>
+          <div class="chart-card">
+            <svg id="chartStrength" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Workouts</h2>
+          <div class="chart-card">
+            <div id="workoutsList" class="workout-list"></div>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Personal Records</h2>
+          <div class="chart-card">
+            <div id="prBoard" class="workout-list"></div>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Top Exercises</h2>
+          <div class="chart-card">
+            <div id="barExercises" class="bar-list"></div>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Movement Pattern Volume</h2>
+          <div class="chart-card">
+            <div id="barMovements" class="bar-list"></div>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Muscle Volume</h2>
+          <div class="chart-card">
+            <div class="bodymap-row">
+              <figure class="bodymap-figure">
+                <svg id="bodyFront"></svg>
+                <figcaption>Front</figcaption>
+              </figure>
+              <figure class="bodymap-figure">
+                <svg id="bodyBack"></svg>
+                <figcaption>Back</figcaption>
+              </figure>
+            </div>
+            <div id="barMuscles" class="bar-list"></div>
+            <p id="unmatchedNote" class="muted small" hidden></p>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Cardio Distance/Week</h2>
+          <div class="chart-card">
+            <svg id="chartCardio" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ===== CALENDAR ===== -->
+      <div class="tab-panel" data-tab="calendar" hidden>
+
+        <section class="chart-section">
+          <div class="cal-header">
+            <h2>Calendar</h2>
+            <div class="cal-nav">
+              <button id="calPrev" class="icon-btn small" aria-label="Previous month">‹</button>
+              <span id="calMonthLabel" class="cal-month-label"></span>
+              <button id="calNext" class="icon-btn small" aria-label="Next month">›</button>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div id="calGrid" class="cal-grid"></div>
+            <div id="calDayDetail" class="workout-detail-body cal-day-detail"></div>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Consistency</h2>
+          <div class="chart-card">
+            <div id="heatmap" class="heatmap"></div>
+          </div>
+        </section>
+
+      </div>
 
       <p class="muted small footer-note">Last synced: <span id="lastSynced">—</span></p>
 
@@ -223,6 +244,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821g"></script>
+<script type="module" src="js/app.js?v=20260821h"></script>
 </body>
 </html>

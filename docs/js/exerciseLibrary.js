@@ -50,6 +50,15 @@ export const MOVEMENTS = [
 ];
 export const MOVEMENT_LABEL = Object.fromEntries(MOVEMENTS.map((m) => [m.key, m.label]));
 
+// Vertical/horizontal push (and pull) are tracked separately above -- real
+// distinctions worth seeing on their own -- but they're also both still
+// "push" in the everyday sense, so Movement Pattern Volume shows both: a
+// Push/Pull total plus the vertical/horizontal split underneath it.
+export const MOVEMENT_GROUPS = [
+  { key: "push", label: "Push", members: ["verticalPush", "horizontalPush"] },
+  { key: "pull", label: "Pull", members: ["verticalPull", "horizontalPull"] },
+];
+
 export const BUILTIN_EXERCISES = {
   "Barbell Squat": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, abs: 0.5, lowerBack: 0.5, adductors: 0.5 } },
   "Bench Press": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 } },

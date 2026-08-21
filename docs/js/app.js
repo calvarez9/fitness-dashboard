@@ -140,13 +140,16 @@ async function onCalendarDaySaved(dateKey) {
   await refreshPRBoard();
 }
 
+let currentDailyByDate = new Map();
+
 async function openCalendarDay(dateKey, events) {
-  await renderDayDetail($("#calDayDetail"), dateKey, events, () => onCalendarDaySaved(dateKey));
+  await renderDayDetail($("#calDayDetail"), dateKey, events, currentDailyByDate.get(dateKey), () => onCalendarDaySaved(dateKey));
   $$(".cal-day", $("#calGrid")).forEach((el) => el.classList.toggle("selected", el.dataset.date === dateKey));
 }
 
 async function renderCalendarAndGrid(selectedDateKey) {
-  const { byDay } = await loadMonth(calMonth);
+  const { byDay, dailyByDate } = await loadMonth(calMonth);
+  currentDailyByDate = dailyByDate;
   renderCalendarGrid($("#calGrid"), calMonth, byDay, openCalendarDay);
   if (selectedDateKey) await openCalendarDay(selectedDateKey, byDay.get(selectedDateKey) || []);
 }
@@ -167,7 +170,24 @@ function $$(sel, root = document) {
   return root.querySelectorAll(sel);
 }
 
+const TAB_STORAGE_KEY = "fitnessDashboardActiveTab";
+
+function setActiveTab(tab) {
+  $$(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  $$(".tab-panel").forEach((p) => (p.hidden = p.dataset.tab !== tab));
+  localStorage.setItem(TAB_STORAGE_KEY, tab);
+}
+
+function initTabs() {
+  $$(".tab-btn").forEach((btn) => btn.addEventListener("click", () => setActiveTab(btn.dataset.tab)));
+  const saved = localStorage.getItem(TAB_STORAGE_KEY);
+  const valid = [...$$(".tab-btn")].some((b) => b.dataset.tab === saved);
+  setActiveTab(valid ? saved : "health");
+}
+
 function initDashboardUI() {
+  initTabs();
+
   $("#rangeSelect").addEventListener("change", refresh);
 
   $("#importBtn").addEventListener("click", () => {
