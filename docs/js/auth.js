@@ -105,4 +105,20 @@ export function initAuth({ onSignedIn, onSignedOut }) {
   });
 
   $("#signOutBtn").addEventListener("click", () => supabase.auth.signOut());
+
+  // Self-service PIN reset: emails a Supabase recovery link back to the one
+  // account this dashboard has. Clicking that link re-fires this same
+  // listener with a PASSWORD_RECOVERY event (see above), which swaps to
+  // recoveryView so a new PIN can be set -- no admin/service-role step.
+  $("#forgotPinBtn").addEventListener("click", async () => {
+    const status = $("#forgotPinStatus");
+    $("#forgotPinBtn").disabled = true;
+    status.hidden = false;
+    status.textContent = "Sending link…";
+    const { error } = await supabase.auth.resetPasswordForEmail(ACCOUNT_EMAIL, {
+      redirectTo: window.location.origin + window.location.pathname,
+    });
+    $("#forgotPinBtn").disabled = false;
+    status.textContent = error ? `Couldn't send: ${error.message}` : `Check ${ACCOUNT_EMAIL} for a link to set a new PIN.`;
+  });
 }

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821s" />
+<link rel="stylesheet" href="css/styles.css?v=20260821t" />
 </head>
 <body>
 <div id="app">
@@ -19,6 +19,8 @@
       <input id="loginPin" class="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="current-password" />
       <button id="loginBtn" class="btn primary block">Sign in</button>
       <p id="loginError" class="error-text" hidden></p>
+      <button id="forgotPinBtn" type="button" class="link-btn">Forgot / haven't set a PIN yet?</button>
+      <p id="forgotPinStatus" class="muted small" hidden></p>
     </div>
   </section>
 
@@ -287,6 +289,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821s"></script>
+<script type="module" src="js/app.js?v=20260821t"></script>
 </body>
 </html>
