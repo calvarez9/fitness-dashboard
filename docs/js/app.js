@@ -17,6 +17,7 @@ import {
 } from "./workouts.js";
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
+import { renderMetricDetail } from "./health.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -118,11 +119,42 @@ async function refreshPRBoard() {
   }
 }
 
+// ---------- Health metric "your range" panels ----------
+const METRIC_CONTAINER_ID = { rhr: "detailRhr", battery: "detailBattery", stress: "detailStress", steps: "detailSteps", sleep: "detailSleep" };
+const openMetricPanels = new Set();
+
+function initHealthDetails() {
+  $$(".stat-detail-toggle").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const metric = btn.dataset.metric;
+      const container = $(`#${METRIC_CONTAINER_ID[metric]}`);
+      if (!container.hidden) {
+        container.hidden = true;
+        btn.classList.remove("expanded");
+        openMetricPanels.delete(metric);
+        return;
+      }
+      container.hidden = false;
+      btn.classList.add("expanded");
+      openMetricPanels.add(metric);
+      await renderMetricDetail(container, metric, currentRangeDays());
+    });
+  });
+}
+
+async function refreshOpenMetricPanels() {
+  for (const metric of openMetricPanels) {
+    const container = $(`#${METRIC_CONTAINER_ID[metric]}`);
+    if (container) await renderMetricDetail(container, metric, currentRangeDays());
+  }
+}
+
 async function refresh() {
   try {
     await loadDashboard(currentRangeDays());
     await refreshWorkouts(currentRangeDays());
     await refreshPRBoard();
+    await refreshOpenMetricPanels();
   } catch (e) {
     console.error(e);
     toast("Couldn't load dashboard data — see console.");
@@ -187,6 +219,7 @@ function initTabs() {
 
 function initDashboardUI() {
   initTabs();
+  initHealthDetails();
 
   $("#rangeSelect").addEventListener("change", refresh);
 

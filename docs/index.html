@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821i" />
+<link rel="stylesheet" href="css/styles.css?v=20260821j" />
 </head>
 <body>
 <div id="app">
@@ -66,37 +66,57 @@
       <div class="tab-panel" data-tab="health" hidden>
 
         <section class="chart-section">
-          <h2>Resting Heart Rate</h2>
+          <div class="cal-header">
+            <h2>Resting Heart Rate</h2>
+            <button type="button" class="stat-detail-toggle" data-metric="rhr">Your range <span class="chev">▾</span></button>
+          </div>
           <div class="chart-card">
             <svg id="chartRhr" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+            <div id="detailRhr" class="stat-detail" hidden></div>
           </div>
         </section>
 
         <section class="chart-section">
-          <h2>Body Battery</h2>
+          <div class="cal-header">
+            <h2>Body Battery</h2>
+            <button type="button" class="stat-detail-toggle" data-metric="battery">Your range <span class="chev">▾</span></button>
+          </div>
           <div class="chart-card">
             <svg id="chartBattery" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+            <div id="detailBattery" class="stat-detail" hidden></div>
           </div>
         </section>
 
         <section class="chart-section">
-          <h2>Stress</h2>
+          <div class="cal-header">
+            <h2>Stress</h2>
+            <button type="button" class="stat-detail-toggle" data-metric="stress">Your range <span class="chev">▾</span></button>
+          </div>
           <div class="chart-card">
             <svg id="chartStress" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+            <div id="detailStress" class="stat-detail" hidden></div>
           </div>
         </section>
 
         <section class="chart-section">
-          <h2>Steps</h2>
+          <div class="cal-header">
+            <h2>Steps</h2>
+            <button type="button" class="stat-detail-toggle" data-metric="steps">Your range <span class="chev">▾</span></button>
+          </div>
           <div class="chart-card">
             <svg id="chartSteps" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+            <div id="detailSteps" class="stat-detail" hidden></div>
           </div>
         </section>
 
         <section class="chart-section">
-          <h2>Sleep Duration</h2>
+          <div class="cal-header">
+            <h2>Sleep Duration</h2>
+            <button type="button" class="stat-detail-toggle" data-metric="sleep">Your range <span class="chev">▾</span></button>
+          </div>
           <div class="chart-card">
             <svg id="chartSleep" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+            <div id="detailSleep" class="stat-detail" hidden></div>
           </div>
         </section>
 
@@ -237,6 +257,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821i"></script>
+<script type="module" src="js/app.js?v=20260821j"></script>
 </body>
 </html>
