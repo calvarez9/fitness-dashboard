@@ -12,6 +12,16 @@ const PIN_PATTERN = /^\d{6}$/;
 export function initAuth({ onSignedIn, onSignedOut }) {
   let inRecovery = false;
 
+  // Single source of truth for auth state -- onAuthStateChange already
+  // fires an INITIAL_SESSION event with the current session right after
+  // registration, so a separate getSession() call is not just redundant
+  // but actively dangerous here: on a real recovery-link visit it can
+  // resolve with the now-valid session *before* the PASSWORD_RECOVERY
+  // event has set inRecovery, calling onSignedIn() directly and skipping
+  // the recovery screen entirely. Confirmed this was happening: a live
+  // test of the verifyOtp recovery flow showed the real event order is
+  // INITIAL_SESSION (no session yet) then PASSWORD_RECOVERY (session
+  // now valid) -- both handled here, in order, by one listener, no race.
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY") {
       inRecovery = true;
@@ -21,12 +31,6 @@ export function initAuth({ onSignedIn, onSignedOut }) {
     }
     if (inRecovery) return; // wait for the recovery form instead of jumping to the dashboard
     if (session) onSignedIn(session);
-    else onSignedOut();
-  });
-
-  supabase.auth.getSession().then(({ data }) => {
-    if (inRecovery) return;
-    if (data.session) onSignedIn(data.session);
     else onSignedOut();
   });
 
