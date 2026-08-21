@@ -8,6 +8,7 @@ import {
   renderWorkoutDetail,
   renderExerciseDetail,
   renderMovementDetail,
+  renderMuscleDetail,
   computeExerciseStats,
   computeMovementMuscleStats,
 } from "./workouts.js";
@@ -40,6 +41,7 @@ function renderModalTop() {
   if (top.type === "workout") renderWorkoutDetail(body, top.payload);
   else if (top.type === "exercise") renderExerciseDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
+  else if (top.type === "muscle") renderMuscleDetail(body, top.payload, (name) => pushModal("exercise", name));
 }
 
 function pushModal(type, payload) {
@@ -59,6 +61,8 @@ function closeModal() {
   $("#workoutModal").hidden = true;
 }
 
+let lastMuscleTotals = {};
+
 async function refreshWorkouts(days) {
   const end = new Date();
   const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
@@ -75,7 +79,11 @@ async function refreshWorkouts(days) {
     emptyMessage: "No strength sets in range yet.",
     onClick: (r) => pushModal("movement", r.key),
   });
-  renderBarList($("#barMuscles"), muscleRows, { emptyMessage: "No strength sets in range yet." });
+  renderBarList($("#barMuscles"), muscleRows, {
+    emptyMessage: "No strength sets in range yet.",
+    onClick: (r) => pushModal("muscle", r.key),
+  });
+  lastMuscleTotals = muscleTotals;
   applyVolumeColors($("#bodyFront"), $("#bodyBack"), muscleTotals);
 
   const note = $("#unmatchedNote");
@@ -139,7 +147,10 @@ function initDashboardUI() {
     if (e.target === $("#workoutModal")) closeModal();
   });
 
-  renderBodyMaps($("#bodyFront"), $("#bodyBack"));
+  renderBodyMaps($("#bodyFront"), $("#bodyBack"), (muscleKeys) => {
+    const best = muscleKeys.reduce((a, b) => ((lastMuscleTotals[b] || 0) > (lastMuscleTotals[a] || 0) ? b : a));
+    pushModal("muscle", best);
+  });
 
   $("#calPrev").addEventListener("click", () => {
     calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);

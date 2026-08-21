@@ -1,6 +1,6 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
-import { resolveExerciseMeta, MUSCLES, MOVEMENTS, MOVEMENT_LABEL } from "./exerciseLibrary.js";
+import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL } from "./exerciseLibrary.js";
 import { renderBarList } from "./charts.js";
 
 let cache = { workouts: [], setsByWorkout: new Map(), segmentsByWorkout: new Map(), linkedActivityByWorkout: new Map() };
@@ -332,6 +332,37 @@ export function renderMovementDetail(container, movementKey, onOpenExercise) {
   }
 
   const rows = [...totals.entries()].map(([name, sets]) => ({ label: name, value: sets })).sort((a, b) => b.value - a.value);
+  if (!rows.length) {
+    container.appendChild(emptyNote("No exercises in range."));
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "bar-list";
+  container.appendChild(list);
+  renderBarList(list, rows, { onClick: (r) => onOpenExercise(r.label) });
+}
+
+export function renderMuscleDetail(container, muscleKey, onOpenExercise) {
+  container.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>${esc(MUSCLE_LABEL[muscleKey] || muscleKey)}</h4>`;
+  container.appendChild(header);
+
+  const totals = new Map(); // exercise_name -> fraction-weighted credited sets
+  for (const sets of cache.setsByWorkout.values()) {
+    sets.forEach((s) => {
+      if (s.is_warmup) return;
+      const frac = resolveExerciseMeta(s.exercise_name).muscles?.[muscleKey];
+      if (!frac) return;
+      totals.set(s.exercise_name, (totals.get(s.exercise_name) || 0) + frac);
+    });
+  }
+
+  const rows = [...totals.entries()]
+    .map(([name, credit]) => ({ label: name, value: round(credit) }))
+    .sort((a, b) => b.value - a.value);
   if (!rows.length) {
     container.appendChild(emptyNote("No exercises in range."));
     return;

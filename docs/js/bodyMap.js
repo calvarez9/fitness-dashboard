@@ -66,9 +66,25 @@ function buildFigure(svg, viewBox, outlineD, parts) {
   });
 }
 
-export function renderBodyMaps(frontSvg, backSvg) {
+// onRegionClick(muscleKeys): called with the array of muscle keys a clicked
+// region stands for (e.g. deltoids -> ["frontDelts","middleDelts"]) -- the
+// caller decides which one to drill into (e.g. whichever has more volume).
+export function renderBodyMaps(frontSvg, backSvg, onRegionClick) {
   buildFigure(frontSvg, FRONT_VIEWBOX, bodyFrontOutline, bodyFront);
   buildFigure(backSvg, BACK_VIEWBOX, bodyBackOutline, bodyBack);
+
+  if (onRegionClick) {
+    const wire = (svg, slugMap) => {
+      svg.querySelectorAll("[data-slug]").forEach((g) => {
+        const keys = slugMap[g.dataset.slug];
+        if (!keys) return;
+        g.style.cursor = "pointer";
+        g.addEventListener("click", () => onRegionClick(keys));
+      });
+    };
+    wire(frontSvg, FRONT_SLUG_TO_MUSCLES);
+    wire(backSvg, BACK_SLUG_TO_MUSCLES);
+  }
 }
 
 // muscleTotals: { muscleKey: sets }. max: the period's peak single-muscle

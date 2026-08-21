@@ -33,6 +33,12 @@ export const MUSCLES = [
 ];
 export const MUSCLE_LABEL = Object.fromEntries(MUSCLES.map((m) => [m.key, m.label]));
 
+// "isolation" is intentionally NOT one of these -- isolation-movement
+// exercises (curls, leg extensions, etc.) still carry a `movement:
+// "isolation"` tag below and still count fully toward Muscle Volume, they
+// just don't get their own bucket here. The muscle they target already
+// gets full credit, so a separate "Isolation / Core" movement total would
+// just be double-booking the same volume under a second, vaguer label.
 export const MOVEMENTS = [
   { key: "verticalPush", label: "Vertical Push" },
   { key: "horizontalPush", label: "Horizontal Push" },
@@ -41,7 +47,6 @@ export const MOVEMENTS = [
   { key: "squat", label: "Squat" },
   { key: "hinge", label: "Hinge" },
   { key: "lunge", label: "Lunge" },
-  { key: "isolation", label: "Isolation / Core" },
 ];
 export const MOVEMENT_LABEL = Object.fromEntries(MOVEMENTS.map((m) => [m.key, m.label]));
 
