@@ -1,7 +1,13 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
 import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL } from "./exerciseLibrary.js";
-import { renderBarList } from "./charts.js";
+import { renderBarList, renderProgressChart } from "./charts.js";
+
+// Standard Epley estimated-1RM formula, matching FitLog's own progress view.
+function epley1RM(weight, reps) {
+  if (!weight || !reps) return 0;
+  return weight * (1 + reps / 30);
+}
 
 let cache = { workouts: [], setsByWorkout: new Map(), segmentsByWorkout: new Map(), linkedActivityByWorkout: new Map() };
 
@@ -276,6 +282,62 @@ function sessionsForExercise(exerciseName) {
   return out.sort((a, b) => new Date(b.workout.date) - new Date(a.workout.date));
 }
 
+// One point per session, using that session's best set by estimated 1RM
+// (matches FitLog's own progress view). Skips sessions with no weight data
+// at all (bodyweight/time-based exercises), and renders nothing if none of
+// the sessions have weight data.
+function renderProgressSection(container, sessions) {
+  const points = [];
+  [...sessions]
+    .sort((a, b) => new Date(a.workout.date) - new Date(b.workout.date))
+    .forEach(({ workout, sets }) => {
+      let best = null;
+      sets.forEach((s) => {
+        if (s.weight == null) return;
+        const oneRM = epley1RM(s.weight, s.reps || 1);
+        if (!best || oneRM > best.oneRM) best = { oneRM, weight: s.weight, reps: s.reps };
+      });
+      if (best) {
+        points.push({
+          date: new Date(workout.date),
+          value: Math.round(best.oneRM),
+          topWeight: best.weight,
+          label: new Date(workout.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        });
+      }
+    });
+
+  if (!points.length) return; // bodyweight/time-based exercise -- no weight to chart
+
+  let runningMax = -Infinity;
+  points.forEach((p) => {
+    p.isPR = p.value > runningMax;
+    if (p.isPR) runningMax = p.value;
+  });
+
+  const maxWeight = Math.max(...points.map((p) => p.topWeight));
+  const best1RM = Math.max(...points.map((p) => p.value));
+
+  const cards = document.createElement("div");
+  cards.className = "pr-cards";
+  cards.innerHTML = `
+    <div class="pr-card"><div class="pr-label">Max Weight</div><div class="pr-value">${maxWeight} lb</div></div>
+    <div class="pr-card"><div class="pr-label">Best Est. 1RM</div><div class="pr-value">${best1RM} lb</div></div>
+    <div class="pr-card"><div class="pr-label">Sessions</div><div class="pr-value">${points.length}</div></div>
+  `;
+  container.appendChild(cards);
+
+  const chartCard = document.createElement("div");
+  chartCard.className = "chart-card";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "progress-svg");
+  svg.setAttribute("viewBox", "0 0 600 220");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  chartCard.appendChild(svg);
+  container.appendChild(chartCard);
+  renderProgressChart(svg, points, { yLabel: "lb (est. 1RM)" });
+}
+
 export function renderExerciseDetail(container, exerciseName, onOpenWorkout) {
   container.innerHTML = "";
   const header = document.createElement("div");
@@ -288,6 +350,8 @@ export function renderExerciseDetail(container, exerciseName, onOpenWorkout) {
     container.appendChild(emptyNote("No sessions in range."));
     return;
   }
+
+  renderProgressSection(container, sessions);
 
   sessions.forEach(({ workout, sets }) => {
     const dateLabel = new Date(workout.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });

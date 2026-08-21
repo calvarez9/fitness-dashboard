@@ -111,6 +111,22 @@ main#content { padding: 16px 16px 60px; }
 .trend-svg .legend-text { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
 .chart-empty { color: var(--text-muted); font-size: 13px; padding: 30px; text-align: center; }
 
+/* ---------- Progress chart (ported from FitLog: per-exercise 1RM trend) ---------- */
+.progress-svg { width: 100%; height: auto; display: block; }
+.progress-svg text { font-family: var(--font); fill: var(--text-muted); font-size: 10px; }
+.progress-svg .grid-line { stroke: var(--gridline); stroke-width: 1; }
+.progress-svg .baseline { stroke: var(--baseline); stroke-width: 1; }
+.progress-svg .trend-line { fill: none; stroke: var(--series-1); stroke-width: 2; }
+.progress-svg .trend-point { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; cursor: pointer; }
+.progress-svg .trend-point.pr { fill: var(--series-2); }
+.progress-svg .tooltip-bg { fill: var(--surface-3); stroke: var(--border); }
+.progress-svg .tooltip-text { fill: var(--text-primary); font-weight: 600; font-size: 11px; }
+
+.pr-cards { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.pr-card { flex: 1; min-width: 90px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-s); padding: 10px; }
+.pr-card .pr-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.pr-card .pr-value { font-size: 18px; font-weight: 700; margin-top: 3px; letter-spacing: -0.02em; }
+
 .footer-note { text-align: center; }
 .muted { color: var(--text-secondary); }
 .muted.small { font-size: 12px; color: var(--text-muted); }
