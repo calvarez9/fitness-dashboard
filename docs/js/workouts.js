@@ -996,10 +996,6 @@ export function renderPRBoard(container, onOpenExercise) {
 // breakdown below) so it doesn't also inflate cardio numbers.
 const NON_CARDIO_ACTIVITY_TYPES = new Set(["strength_training"]);
 
-function toDateOnly(d) {
-  return d.toISOString().slice(0, 10);
-}
-
 // ---------- Training Emphasis: Strength / Explosive / Cardio ----------
 // Deliberately three numbers in their own native units rather than one
 // normalized chart -- see the reasoning discussed with the user: forcing
@@ -1034,24 +1030,34 @@ export async function loadTrainingEmphasis(start, end) {
     });
   }
 
-  const [activitiesRes, dailyRes] = await Promise.all([
-    supabase
-      .from("garmin_activities")
-      .select("duration_seconds, activity_type")
-      .gte("start_time", start.toISOString())
-      .lte("start_time", end.toISOString()),
-    supabase.from("garmin_daily_stats").select("date, intensity_minutes").gte("date", toDateOnly(start)).lte("date", toDateOnly(end)).order("date", { ascending: false }),
-  ]);
-  if (!activitiesRes.error) {
-    (activitiesRes.data || [])
+  // Garmin's own garmin_daily_stats.intensity_minutes is a *whole-day*
+  // total (moderate + 2x vigorous minutes across everything that raised
+  // your heart rate that day) -- it can't be filtered by activity type at
+  // all, so a hard strength session was quietly still counting as cardio
+  // here even after every other cardio stat got the strength_training
+  // exclusion. Computed from each activity's own HR-zone seconds instead
+  // (zone 3 = moderate, zones 4-5 = vigorous, the standard 5-zone
+  // convention) so the strength_training filter actually applies.
+  const { data: activities, error: activitiesErr } = await supabase
+    .from("garmin_activities")
+    .select("activity_name, activity_type, duration_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds")
+    .gte("start_time", start.toISOString())
+    .lte("start_time", end.toISOString());
+
+  const cardioIntensityByActivity = [];
+  if (!activitiesErr) {
+    (activities || [])
       .filter((a) => !NON_CARDIO_ACTIVITY_TYPES.has(a.activity_type))
       .forEach((a) => {
         cardioMinutes += (a.duration_seconds || 0) / 60;
+        const moderateMin = (a.hr_zone_3_seconds || 0) / 60;
+        const vigorousMin = ((a.hr_zone_4_seconds || 0) + (a.hr_zone_5_seconds || 0)) / 60;
+        const intensity = moderateMin + 2 * vigorousMin;
+        if (intensity > 0) cardioIntensityByActivity.push({ label: a.activity_name || a.activity_type, minutes: intensity });
       });
   }
-  const cardioIntensityDays = (dailyRes.data || []).filter((d) => d.intensity_minutes);
-  cache.cardioIntensityDays = cardioIntensityDays; // for the click-through detail, avoids a second fetch
-  const cardioIntensityMinutes = cardioIntensityDays.reduce((sum, d) => sum + d.intensity_minutes, 0);
+  cache.cardioIntensityByActivity = cardioIntensityByActivity; // for the click-through detail, avoids a second fetch
+  const cardioIntensityMinutes = cardioIntensityByActivity.reduce((sum, a) => sum + a.minutes, 0);
 
   return {
     strengthSets: Math.round(strengthSets),
@@ -1133,26 +1139,24 @@ export function renderExplosiveDetail(container, onOpenExercise) {
   );
 }
 
-// Cardio Intensity Minutes is a daily total (Garmin computes it per day,
-// not per activity), so its breakdown is by date rather than by exercise --
-// reads straight from the cache loadTrainingEmphasis already populated,
-// same "reuse what's already loaded" approach as the other detail views.
+// Breakdown by activity (not exercise -- there's no FitLog exercise to
+// click into here) -- reads straight from the cache loadTrainingEmphasis
+// already populated, same "reuse what's already loaded" approach as the
+// other detail views.
 export function renderCardioIntensityDetail(container) {
   container.innerHTML = "";
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>Cardio — Intensity Minutes</h4><p class="muted small">Garmin's per-day total: moderate minutes + 2× vigorous minutes.</p>`;
+  header.innerHTML = `<h4>Cardio — Intensity Minutes</h4><p class="muted small">Per cardio activity: HR-zone-3 minutes + 2× HR-zone-4/5 minutes. Strength sessions excluded.</p>`;
   container.appendChild(header);
 
-  const days = cache.cardioIntensityDays || [];
-  if (!days.length) {
+  const activities = cache.cardioIntensityByActivity || [];
+  if (!activities.length) {
     container.appendChild(emptyNote("No intensity minutes in range."));
     return;
   }
 
-  const rows = days
-    .map((d) => ({ label: new Date(d.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }), value: d.intensity_minutes }))
-    .sort((a, b) => b.value - a.value);
+  const rows = activities.map((a) => ({ label: a.label, value: Math.round(a.minutes * 10) / 10 })).sort((a, b) => b.value - a.value);
   const list = document.createElement("div");
   list.className = "bar-list";
   container.appendChild(list);
