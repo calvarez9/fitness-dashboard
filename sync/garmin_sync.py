@@ -163,14 +163,25 @@ def sync_day(garmin, date_str):
     return row
 
 
+# Activity names to drop entirely rather than count as cardio -- currently
+# just the dog-walk sessions, which aren't meant to represent training
+# load. Matched case-insensitively, substring, so "Pauwi Walk", "pauwi
+# walk 🐕", etc. all get caught. Add more names here if other low-effort
+# GPS-tracked sessions (that Garmin still logs as "activities") show up.
+EXCLUDED_ACTIVITY_NAMES = ["pauwi"]
+
+
 def sync_activities(garmin, limit=20):
     activities = garmin.get_activities(0, limit) or []
     rows = []
     for a in activities:
+        name = a.get("activityName") or ""
+        if any(x in name.lower() for x in EXCLUDED_ACTIVITY_NAMES):
+            continue
         rows.append(
             {
                 "id": a.get("activityId"),
-                "activity_name": a.get("activityName"),
+                "activity_name": name,
                 "activity_type": (a.get("activityType") or {}).get("typeKey"),
                 "start_time": a.get("startTimeGMT"),
                 "duration_seconds": a.get("duration"),
@@ -179,6 +190,17 @@ def sync_activities(garmin, limit=20):
                 "max_hr": a.get("maxHR"),
                 "calories": a.get("calories"),
                 "elevation_gain_meters": a.get("elevationGain"),
+                # Garmin's own aerobic/anaerobic classification (Firstbeat-
+                # modeled, 0-5 each) plus its training-load number and the
+                # human-readable label ("TEMPO", "BASE", etc) it derives
+                # from them -- exact field names are a best guess same as
+                # everywhere else in this file; `raw` below is the fallback
+                # if any of these turn out to be named differently on a
+                # real account.
+                "aerobic_training_effect": a.get("aerobicTrainingEffect"),
+                "anaerobic_training_effect": a.get("anaerobicTrainingEffect"),
+                "training_effect_label": a.get("trainingEffectLabel"),
+                "activity_training_load": a.get("activityTrainingLoad"),
                 "raw": a,
             }
         )
