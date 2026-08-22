@@ -102,7 +102,7 @@ export function renderExerciseForm(container, name, onDone) {
       <label>Movement pattern</label>
       <select id="libFormMovement">${MOVEMENTS.map((m) => `<option value="${m.key}" ${m.key === movement ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>
     </div>
-    <div class="edit-field"><label>Athleticism (0 = none, 1–2 = explosive/power)</label><input type="number" id="libFormAthleticism" min="0" max="3" step="0.1" value="${athleticism || ""}" placeholder="0" /></div>
+    <div class="edit-field"><label>Athleticism (0 = none, 0.2–0.5 = compound, 1 = explosive/power)</label><input type="number" id="libFormAthleticism" min="0" max="1.5" step="0.1" value="${athleticism || ""}" placeholder="0" /></div>
     <div class="edit-field">
       <label>Joint load (0 = none, up to ~1 = heavy)</label>
       <div class="joint-load-grid">

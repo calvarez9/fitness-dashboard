@@ -996,38 +996,31 @@ export function renderPRBoard(container, onOpenExercise) {
 // breakdown below) so it doesn't also inflate cardio numbers.
 const NON_CARDIO_ACTIVITY_TYPES = new Set(["strength_training"]);
 
-// ---------- Training Emphasis: Strength / Explosive / Cardio ----------
+// ---------- Training Emphasis: Strength / Athleticism / Cardio ----------
 // Deliberately three numbers in their own native units rather than one
 // normalized chart -- see the reasoning discussed with the user: forcing
 // cardio onto a "sets" scale (or vice versa) would be more misleading than
-// honest. All three are now plain counts/minutes instead of weighted
-// scores, after the weighted Athleticism score and Garmin's black-box
-// Cardio Load number both turned out to read as arbitrary -- a number you
-// can't sanity-check against anything is worse than a number with no
-// framing at all. Explosive Sets is a plain count of sets from movements
-// tagged athleticism >= 1 (jumps, throws, Olympic lifts -- see
-// exerciseLibrary.js); ordinary compound lifts' smaller athleticism credit
+// honest. Athleticism is credited sets, not a free-floating score: an
+// isolation set counts 0, a compound lift counts as a fraction of a set
+// (0.2-0.5, see exerciseLibrary.js), a genuinely explosive/power movement
+// counts as a full set -- the same "credited sets" model Muscle Volume
+// already uses (primary muscle = 1, secondary = 0.5), just applied to
+// athletic quality instead of muscle engagement, and folded into one
+// number rather than split into a separate Explosive count next to it.
 // Cardio Intensity Minutes is Garmin's own published metric (moderate
 // minutes + 2x vigorous minutes) -- a real, externally-defined unit
 // (WHO's guidance is framed in these same minutes), not something we
-// invented. Athleticism is the original weighted sum (isolation 0,
-// compound 0.2-0.4/set, explosive 1.0-2.0/set) -- kept alongside the
-// plain Explosive count rather than replaced by it, since the two answer
-// different questions: Explosive is "how much true power work," while
-// Athleticism captures compound lifts' smaller athletic contribution too.
+// invented.
 export async function loadTrainingEmphasis(start, end) {
   let strengthSets = 0;
-  let explosiveSets = 0;
-  let athleticismScore = 0;
+  let athleticismSets = 0;
   let cardioMinutes = 0;
 
   for (const sets of cache.setsByWorkout.values()) {
     sets.forEach((s) => {
       if (s.is_warmup) return;
       strengthSets += 1;
-      const athleticism = resolveExerciseMeta(s.exercise_name).athleticism || 0;
-      if (athleticism >= 1) explosiveSets += 1;
-      athleticismScore += athleticism;
+      athleticismSets += resolveExerciseMeta(s.exercise_name).athleticism || 0;
     });
   }
   for (const segments of cache.segmentsByWorkout.values()) {
@@ -1074,14 +1067,13 @@ export async function loadTrainingEmphasis(start, end) {
 
   return {
     strengthSets: Math.round(strengthSets),
-    explosiveSets: Math.round(explosiveSets),
-    athleticismScore: Math.round(athleticismScore * 10) / 10,
+    athleticismSets: Math.round(athleticismSets * 10) / 10,
     cardioMinutes: Math.round(cardioMinutes),
     cardioIntensityMinutes: Math.round(cardioIntensityMinutes),
   };
 }
 
-export function renderTrainingEmphasis(container, { strengthSets, explosiveSets, athleticismScore, cardioMinutes, cardioIntensityMinutes }, onOpen) {
+export function renderTrainingEmphasis(container, { strengthSets, athleticismSets, cardioMinutes, cardioIntensityMinutes }, onOpen) {
   container.innerHTML = `
     <div class="stat-row emphasis-row">
       <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="strength">
@@ -1091,13 +1083,8 @@ export function renderTrainingEmphasis(container, { strengthSets, explosiveSets,
       </button>
       <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="athleticism">
         <div class="stat-label">Athleticism</div>
-        <div class="stat-value">${athleticismScore}</div>
-        <div class="stat-sub">weighted score</div>
-      </button>
-      <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="explosive">
-        <div class="stat-label">Explosive</div>
-        <div class="stat-value">${explosiveSets}</div>
-        <div class="stat-sub">power sets</div>
+        <div class="stat-value">${athleticismSets}</div>
+        <div class="stat-sub">credited sets</div>
       </button>
       <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="cardio">
         <div class="stat-label">Cardio</div>
@@ -1105,7 +1092,7 @@ export function renderTrainingEmphasis(container, { strengthSets, explosiveSets,
         <div class="stat-sub">intensity min · ${cardioMinutes} min total</div>
       </button>
     </div>
-    <p class="muted small">Athleticism sums each set's tagged score (isolation 0, compound 0.2–0.4, explosive 1.0–2.0) -- Explosive is just the count of sets at that high end, on its own. Cardio Intensity Minutes is Garmin's own metric (moderate + 2× vigorous minutes) -- the same framing WHO's guidelines use. Tap any of these to see what's contributing.</p>
+    <p class="muted small">Athleticism credits each set like a working set, just scaled: isolation work 0, compound lifts 0.2–0.5 of a set, explosive/power movements a full set. Cardio Intensity Minutes is Garmin's own metric (moderate + 2× vigorous minutes) -- the same framing WHO's guidelines use. Tap any of these to see what's contributing.</p>
   `;
   if (onOpen) {
     container.querySelectorAll("[data-emphasis]").forEach((btn) => {
@@ -1155,19 +1142,9 @@ export function renderStrengthEmphasisDetail(container, onOpenExercise) {
 export function renderAthleticismDetail(container, onOpenExercise) {
   renderSetCountDetail(
     container,
-    "Athleticism — Weighted Score",
-    "Each set's tagged score, summed: isolation 0, compound lifts 0.2–0.4, explosive/power work 1.0–2.0.",
+    "Athleticism — Credited Sets",
+    "Each set counted like a working set, just scaled: isolation 0, compound lifts 0.2–0.5 of a set, explosive/power movements a full set.",
     (meta) => meta.athleticism || 0,
-    onOpenExercise
-  );
-}
-
-export function renderExplosiveDetail(container, onOpenExercise) {
-  renderSetCountDetail(
-    container,
-    "Explosive — Power Sets",
-    "Sets from movements tagged athleticism ≥ 1 (jumps, throws, Olympic lifts).",
-    (meta) => ((meta.athleticism || 0) >= 1 ? 1 : 0),
     onOpenExercise
   );
 }

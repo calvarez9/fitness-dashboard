@@ -18,7 +18,6 @@ import {
   renderTrainingEmphasis,
   renderStrengthEmphasisDetail,
   renderAthleticismDetail,
-  renderExplosiveDetail,
   renderCardioIntensityDetail,
   loadJointLoad,
   renderJointLoad,
@@ -73,7 +72,6 @@ function renderModalTop() {
     const onOpenExercise = (name) => pushModal("exercise", name);
     if (top.payload === "strength") renderStrengthEmphasisDetail(body, onOpenExercise);
     else if (top.payload === "athleticism") renderAthleticismDetail(body, onOpenExercise);
-    else if (top.payload === "explosive") renderExplosiveDetail(body, onOpenExercise);
     else if (top.payload === "cardio") renderCardioIntensityDetail(body);
   }
 }
