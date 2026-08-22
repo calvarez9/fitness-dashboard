@@ -6,6 +6,7 @@ import {
   loadWorkouts,
   renderWorkoutsList,
   renderWorkoutDetail,
+  renderGarminActivityDetail,
   renderExerciseDetail,
   renderMovementDetail,
   renderMuscleDetail,
@@ -60,6 +61,7 @@ function renderModalTop() {
   $("#workoutModalBack").hidden = modalStack.length <= 1;
   const body = $("#workoutModalBody");
   if (top.type === "workout") renderWorkoutDetail(body, top.payload, onWorkoutSaved);
+  else if (top.type === "garminActivity") renderGarminActivityDetail(body, top.payload);
   else if (top.type === "exercise") renderExerciseDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "muscle") renderMuscleDetail(body, top.payload, (name) => pushModal("exercise", name));
@@ -99,7 +101,11 @@ async function refreshWorkouts(days) {
   const cardioZones = await loadCardioZones(start, end);
   renderCardioZones($("#cardioZones"), cardioZones);
 
-  renderWorkoutsList($("#workoutsList"), (id) => pushModal("workout", id));
+  renderWorkoutsList(
+    $("#workoutsList"),
+    (id) => pushModal("workout", id),
+    (id) => pushModal("garminActivity", id)
+  );
   makeCollapsible($("#workoutsList"));
 
   renderBarList($("#barExercises"), computeExerciseStats(10), {

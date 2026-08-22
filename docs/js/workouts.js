@@ -9,7 +9,7 @@ function epley1RM(weight, reps) {
   return weight * (1 + reps / 30);
 }
 
-let cache = { workouts: [], setsByWorkout: new Map(), segmentsByWorkout: new Map(), linkedActivityByWorkout: new Map() };
+let cache = { workouts: [], setsByWorkout: new Map(), segmentsByWorkout: new Map(), linkedActivityByWorkout: new Map(), garminOnly: [] };
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -72,47 +72,123 @@ export async function loadWorkouts(start, end) {
     if (l.garmin_activities) linkedActivityByWorkout.set(l.fitlog_workout_id, l.garmin_activities);
   });
 
-  cache = { workouts: workouts || [], setsByWorkout, segmentsByWorkout, linkedActivityByWorkout };
+  // Garmin-tracked cardio (runs, rows, walks, etc.) that was never logged
+  // in FitLog at all -- these have no fitlog_workouts row and so were
+  // previously invisible outside the aggregate charts. Anything already
+  // linked to a FitLog workout above is excluded here so it isn't shown
+  // twice (once as the logged workout, once as its own entry).
+  const garminOnly = await loadUnlinkedGarminActivities(start, end);
+
+  cache = { workouts: workouts || [], setsByWorkout, segmentsByWorkout, linkedActivityByWorkout, garminOnly };
   return cache;
 }
 
+async function loadUnlinkedGarminActivities(start, end) {
+  const { data: activities, error } = await supabase
+    .from("garmin_activities")
+    .select(
+      "id, activity_name, activity_type, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories, activity_training_load, aerobic_training_effect, anaerobic_training_effect, training_effect_label"
+    )
+    .neq("activity_type", "strength_training")
+    .gte("start_time", start.toISOString())
+    .lte("start_time", end.toISOString())
+    .order("start_time", { ascending: false });
+  if (error || !activities?.length) return [];
+
+  const { data: linkRows } = await supabase
+    .from("workout_links")
+    .select("garmin_activity_id")
+    .in(
+      "garmin_activity_id",
+      activities.map((a) => a.id)
+    )
+    .then(
+      (r) => r,
+      () => ({ data: [] })
+    );
+  const linkedIds = new Set((linkRows || []).map((l) => l.garmin_activity_id));
+  return activities.filter((a) => !linkedIds.has(a.id));
+}
+
 // ---------- Workout list + detail ----------
-export function renderWorkoutsList(container, onOpen) {
+// onOpen(id): a logged FitLog workout was clicked.
+// onOpenGarmin(id): a Garmin-only activity (no FitLog entry at all) was
+// clicked -- kept as a separate callback since it opens a different,
+// read-only detail view rather than the editable workout one.
+export function renderWorkoutsList(container, onOpen, onOpenGarmin) {
   container.innerHTML = "";
-  if (!cache.workouts.length) {
+  const fitlogRows = cache.workouts.map((w) => ({ kind: "fitlog", date: new Date(w.date), workout: w }));
+  const garminRows = cache.garminOnly.map((a) => ({ kind: "garmin", date: new Date(a.start_time), activity: a }));
+  const combined = [...fitlogRows, ...garminRows].sort((a, b) => b.date - a.date);
+
+  if (!combined.length) {
     container.appendChild(emptyNote("No workouts in range yet."));
     return;
   }
-  cache.workouts.forEach((w) => {
-    const sets = cache.setsByWorkout.get(w.id) || [];
-    const segs = cache.segmentsByWorkout.get(w.id) || [];
-    const dateLabel = new Date(w.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
-    let sub;
-    if (w.type === "cardio") {
-      sub = `${segs.length} segment${segs.length === 1 ? "" : "s"}`;
+  combined.forEach((entry) => {
+    if (entry.kind === "fitlog") {
+      container.appendChild(renderFitlogRow(entry.workout, onOpen));
     } else {
-      const exerciseCount = new Set(sets.map((s) => s.exercise_name)).size;
-      const workingSets = sets.filter((s) => !s.is_warmup).length;
-      sub = `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"} · ${workingSets} set${workingSets === 1 ? "" : "s"}`;
+      container.appendChild(renderGarminRow(entry.activity, onOpenGarmin));
     }
-
-    const linked = cache.linkedActivityByWorkout.get(w.id);
-    if (linked?.avg_hr != null) sub += ` · ${linked.avg_hr} avg hr`;
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "workout-row";
-    row.innerHTML = `
-      <span class="workout-row-date">${dateLabel}</span>
-      <span class="workout-row-main">
-        <span class="workout-row-name">${esc(w.name || (w.type === "cardio" ? "Cardio" : "Workout"))}${linked ? ' <span class="linked-badge" title="Also recorded on Garmin">⌚</span>' : ""}</span>
-        <span class="workout-row-sub">${esc(sub)}</span>
-      </span>
-      <span class="workout-type-badge ${w.type === "cardio" ? "cardio" : "strength"}">${w.type === "cardio" ? "cardio" : "strength"}</span>
-    `;
-    row.addEventListener("click", () => onOpen(w.id));
-    container.appendChild(row);
   });
+}
+
+function renderFitlogRow(w, onOpen) {
+  const sets = cache.setsByWorkout.get(w.id) || [];
+  const segs = cache.segmentsByWorkout.get(w.id) || [];
+  const dateLabel = new Date(w.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+
+  let sub;
+  if (w.type === "cardio") {
+    sub = `${segs.length} segment${segs.length === 1 ? "" : "s"}`;
+  } else {
+    const exerciseCount = new Set(sets.map((s) => s.exercise_name)).size;
+    const workingSets = sets.filter((s) => !s.is_warmup).length;
+    sub = `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"} · ${workingSets} set${workingSets === 1 ? "" : "s"}`;
+  }
+
+  const linked = cache.linkedActivityByWorkout.get(w.id);
+  if (linked?.avg_hr != null) sub += ` · ${linked.avg_hr} avg hr`;
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "workout-row";
+  row.innerHTML = `
+    <span class="workout-row-date">${dateLabel}</span>
+    <span class="workout-row-main">
+      <span class="workout-row-name">${esc(w.name || (w.type === "cardio" ? "Cardio" : "Workout"))}${linked ? ' <span class="linked-badge" title="Also recorded on Garmin">⌚</span>' : ""}</span>
+      <span class="workout-row-sub">${esc(sub)}</span>
+    </span>
+    <span class="workout-type-badge ${w.type === "cardio" ? "cardio" : "strength"}">${w.type === "cardio" ? "cardio" : "strength"}</span>
+  `;
+  row.addEventListener("click", () => onOpen(w.id));
+  return row;
+}
+
+// A Garmin activity with no FitLog entry at all -- not editable here (there's
+// no fitlog_workouts row to edit), just a read-only view of what Garmin
+// recorded. Log it in FitLog instead if you want to add notes/edit it.
+function renderGarminRow(a, onOpenGarmin) {
+  const dateLabel = new Date(a.start_time).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const bits = [];
+  if (a.duration_seconds != null) bits.push(`${Math.round(a.duration_seconds / 60)} min`);
+  if (a.distance_meters) bits.push(`${(a.distance_meters * 0.000621371).toFixed(1)} mi`);
+  if (a.avg_hr != null) bits.push(`${a.avg_hr} avg hr`);
+
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "workout-row";
+  row.innerHTML = `
+    <span class="workout-row-date">${dateLabel}</span>
+    <span class="workout-row-main">
+      <span class="workout-row-name">${esc(a.activity_name || a.activity_type)} <span class="linked-badge" title="Garmin-tracked, not logged in FitLog">⌚</span></span>
+      <span class="workout-row-sub">${esc(bits.join(" · "))}</span>
+    </span>
+    <span class="workout-type-badge cardio">cardio</span>
+  `;
+  row.addEventListener("click", () => onOpenGarmin(a.id));
+  return row;
 }
 
 // onSaved(): called after a successful edit save or delete, so the caller
@@ -124,6 +200,60 @@ export function renderWorkoutDetail(container, id, onSaved) {
   const segments = cache.segmentsByWorkout.get(id) || [];
   const linkedActivity = cache.linkedActivityByWorkout.get(id) || null;
   renderWorkoutDetailData(container, workout, sets, segments, linkedActivity, { onSaved });
+}
+
+// Read-only detail for a Garmin activity that has no FitLog workout behind
+// it at all -- no edit/delete, since there's nothing here to edit; log it
+// in FitLog if you want notes or the ability to change it.
+export async function renderGarminActivityDetail(container, activityId) {
+  container.innerHTML = "";
+  let a = cache.garminOnly.find((x) => x.id === activityId);
+  if (!a) {
+    const { data } = await supabase.from("garmin_activities").select("*").eq("id", activityId).maybeSingle();
+    a = data;
+  }
+  if (!a) {
+    container.appendChild(emptyNote("Activity not found."));
+    return;
+  }
+
+  const dateLabel = new Date(a.start_time).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>${esc(a.activity_name || a.activity_type)}</h4><p class="muted small">${esc(dateLabel)} · ⌚ Garmin-tracked, not logged in FitLog</p>`;
+  container.appendChild(header);
+
+  const bits = [];
+  if (a.duration_seconds != null) bits.push(`${Math.round(a.duration_seconds / 60)} min`);
+  if (a.distance_meters) bits.push(`${(a.distance_meters * 0.000621371).toFixed(2)} mi`);
+  if (a.calories != null) bits.push(`${a.calories} cal`);
+  if (a.avg_hr != null) bits.push(`${a.avg_hr} avg hr`);
+  if (a.max_hr != null) bits.push(`${a.max_hr} max hr`);
+  if (a.activity_training_load != null) bits.push(`${Math.round(a.activity_training_load)} training load`);
+  if (bits.length) {
+    const statsEl = document.createElement("p");
+    statsEl.className = "muted small";
+    statsEl.textContent = bits.join(" · ");
+    container.appendChild(statsEl);
+  }
+
+  if (a.training_effect_label) {
+    const effect = document.createElement("p");
+    effect.className = "muted small";
+    const aerobic = a.aerobic_training_effect != null ? `aerobic ${a.aerobic_training_effect.toFixed(1)}` : null;
+    const anaerobic = a.anaerobic_training_effect != null ? `anaerobic ${a.anaerobic_training_effect.toFixed(1)}` : null;
+    effect.textContent = `${a.training_effect_label.replaceAll("_", " ")}${aerobic || anaerobic ? ` (${[aerobic, anaerobic].filter(Boolean).join(", ")})` : ""}`;
+    container.appendChild(effect);
+  }
+
+  const zones = [1, 2, 3, 4, 5].map((n) => ({ n, seconds: a[`hr_zone_${n}_seconds`] || 0 }));
+  if (zones.some((z) => z.seconds > 0)) {
+    const zoneWrap = document.createElement("div");
+    zoneWrap.className = "sleep-stages";
+    zoneWrap.style.marginTop = "10px";
+    container.appendChild(zoneWrap);
+    renderCardioZones(zoneWrap, zones);
+  }
 }
 
 // Pure version of the above -- takes the workout + its children directly
