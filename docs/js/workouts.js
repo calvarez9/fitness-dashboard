@@ -1127,7 +1127,7 @@ export async function loadTrainingEmphasis(start, end) {
   };
 }
 
-export function renderTrainingEmphasis(container, { strengthSets, athleticismSets, cardioMinutes, cardioIntensityMinutes }, onOpen) {
+export function renderTrainingEmphasis(container, { strengthSets, athleticismSets, cardioIntensityMinutes }, onOpen) {
   container.innerHTML = `
     <div class="stat-row emphasis-row">
       <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="strength">
@@ -1143,7 +1143,7 @@ export function renderTrainingEmphasis(container, { strengthSets, athleticismSet
       <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="cardio">
         <div class="stat-label">Cardio</div>
         <div class="stat-value">${cardioIntensityMinutes}</div>
-        <div class="stat-sub">intensity min · ${cardioMinutes} min total</div>
+        <div class="stat-sub">intensity min</div>
       </button>
     </div>
     <p class="muted small">Athleticism credits each set like a working set, just scaled: isolation work 0, compound lifts 0.2–0.5 of a set, explosive/power movements a full set. Cardio Intensity Minutes is Garmin's own metric (moderate + 2× vigorous minutes) -- the same framing WHO's guidelines use. Tap any of these to see what's contributing.</p>
