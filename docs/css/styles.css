@@ -82,6 +82,7 @@ body { margin: 0; font-family: var(--font); background: var(--surface-2); color:
   border: none; background: var(--surface-3); color: var(--text-primary);
   width: 36px; height: 36px; border-radius: 999px; font-size: 16px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
+  text-decoration: none; /* .icon-btn is also used on an <a> (sync-now link) */
 }
 .icon-btn.small { width: 28px; height: 28px; font-size: 13px; }
 

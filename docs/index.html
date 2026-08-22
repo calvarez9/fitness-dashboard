@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821x" />
+<link rel="stylesheet" href="css/styles.css?v=20260821y" />
 </head>
 <body>
 <div id="app">
@@ -49,6 +49,16 @@
           <option value="365">Last year</option>
         </select>
         <button id="importBtn" class="icon-btn" aria-label="Import FitLog backup" title="Import FitLog backup">⬆</button>
+        <a
+          id="syncNowLink"
+          class="icon-btn"
+          href="https://github.com/calvarez9/fitness-dashboard/actions/workflows/garmin-sync.yml"
+          target="_blank"
+          rel="noopener"
+          aria-label="Sync Garmin now (opens GitHub Actions)"
+          title="Sync Garmin now (opens GitHub Actions)"
+          >↻</a
+        >
         <button id="signOutBtn" class="icon-btn" aria-label="Sign out" title="Sign out">⏻</button>
       </div>
     </header>
@@ -303,6 +313,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821x"></script>
+<script type="module" src="js/app.js?v=20260821y"></script>
 </body>
 </html>

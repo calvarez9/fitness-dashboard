@@ -1,0 +1,38 @@
+name: Garmin sync (manual)
+
+# Manual "sync now" button -- click "Run workflow" on this workflow's page
+# in the Actions tab (or the dashboard's shortcut link) instead of waiting
+# for the local launchd job's next scheduled run. Runs the exact same
+# script the local job runs; nothing about that job changes.
+on:
+  workflow_dispatch:
+    inputs:
+      backfill_days:
+        description: "Backfill N days instead of the usual incremental sync (leave blank for normal)"
+        required: false
+        default: ""
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r sync/requirements.txt
+
+      - name: Run sync
+        working-directory: sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ -n "${{ github.event.inputs.backfill_days }}" ]; then
+            python3 garmin_sync.py --backfill "${{ github.event.inputs.backfill_days }}"
+          else
+            python3 garmin_sync.py --force
+          fi
