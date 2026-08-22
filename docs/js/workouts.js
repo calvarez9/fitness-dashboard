@@ -996,6 +996,58 @@ export function renderPRBoard(container, onOpenExercise) {
 // breakdown below) so it doesn't also inflate cardio numbers.
 const NON_CARDIO_ACTIVITY_TYPES = new Set(["strength_training"]);
 
+// Per-activity hr_zone_1..5_seconds turned out to be populated on maybe 1
+// in 10 real activities -- Garmin just doesn't return that granular
+// breakdown for most sessions, regardless of type. avg_hr/max_hr, by
+// contrast, are on essentially every activity, so effort is classified
+// from those instead: each activity's avg_hr is compared against an
+// estimated personal max HR (the highest max_hr Garmin has ever recorded
+// for this account, across all activities -- self-calibrating, no age or
+// manual config needed) using the standard %HRmax zone bands, and the
+// activity's *entire* duration is credited to whichever single zone its
+// average effort falls into. Coarser than true continuous zone tracking,
+// but it actually has data for every session instead of being right on
+// one activity in ten and silently wrong (reading as zero effort) on the
+// rest.
+let cachedEstimatedMaxHR = null;
+async function getEstimatedMaxHR() {
+  if (cachedEstimatedMaxHR) return cachedEstimatedMaxHR;
+  const { data, error } = await supabase.from("garmin_activities").select("max_hr").not("max_hr", "is", null).order("max_hr", { ascending: false }).limit(1);
+  cachedEstimatedMaxHR = !error && data?.length ? data[0].max_hr : 190; // generic fallback if this account somehow has no HR data at all yet
+  return cachedEstimatedMaxHR;
+}
+
+// Standard 5-zone %HRmax bands. Returns 0 (no credit) below zone 1.
+function classifyZone(avgHr, maxHR) {
+  if (!avgHr || !maxHR) return 0;
+  const pct = avgHr / maxHR;
+  if (pct >= 0.9) return 5;
+  if (pct >= 0.8) return 4;
+  if (pct >= 0.7) return 3;
+  if (pct >= 0.6) return 2;
+  if (pct >= 0.5) return 1;
+  return 0;
+}
+
+// Garmin's own moderate/vigorous formula (zone 3 = moderate = 1x, zones
+// 4-5 = vigorous = 2x), applied to whichever data is actually available:
+// real per-second zone data when present (accurate), or the activity's
+// avg_hr classified as a single zone for its whole duration when it's
+// not (coarser, but real for every activity instead of only some).
+function activityIntensityMinutes(activity, durationMin, estimatedMaxHR) {
+  // Presence, not magnitude -- a real fetch can legitimately come back all
+  // zeros (an activity spent entirely in zones 1-2), which must still be
+  // read as "real data, zero moderate/vigorous time," not as "missing."
+  const hasRealZoneData = activity.hr_zone_3_seconds != null;
+  if (hasRealZoneData) {
+    const moderateMin = (activity.hr_zone_3_seconds || 0) / 60;
+    const vigorousMin = ((activity.hr_zone_4_seconds || 0) + (activity.hr_zone_5_seconds || 0)) / 60;
+    return moderateMin + 2 * vigorousMin;
+  }
+  const zone = classifyZone(activity.avg_hr, estimatedMaxHR);
+  return zone >= 4 ? durationMin * 2 : zone === 3 ? durationMin : 0;
+}
+
 // ---------- Training Emphasis: Strength / Athleticism / Cardio ----------
 // Deliberately three numbers in their own native units rather than one
 // normalized chart -- see the reasoning discussed with the user: forcing
@@ -1030,22 +1082,26 @@ export async function loadTrainingEmphasis(start, end) {
   }
 
   // Garmin's own garmin_daily_stats.intensity_minutes is a *whole-day*
-  // total (moderate + 2x vigorous minutes across everything that raised
-  // your heart rate that day) -- it can't be filtered by activity type at
-  // all, so a hard strength session was quietly still counting as cardio
-  // here even after every other cardio stat got the strength_training
-  // exclusion. Computed from each activity's own HR-zone seconds instead
-  // (zone 3 = moderate, zones 4-5 = vigorous, the standard 5-zone
-  // convention) so the strength_training filter actually applies.
-  const { data: activities, error: activitiesErr } = await supabase
-    .from("garmin_activities")
-    .select("activity_name, activity_type, duration_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds")
-    .gte("start_time", start.toISOString())
-    .lte("start_time", end.toISOString());
+  // total that can't be filtered by activity type. Real per-activity
+  // hr_zone_*_seconds is now fetched properly at sync time (see
+  // sync/garmin_sync.py's fetch_hr_zones) and is used here when present;
+  // avg_hr-based classification (see classifyZone above) is only a
+  // fallback for activities synced before that fix, or on the rare fetch
+  // failure -- avg_hr is reliably present on nearly everything, real zone
+  // seconds are not (yet).
+  const [estimatedMaxHR, activitiesRes] = await Promise.all([
+    getEstimatedMaxHR(),
+    supabase
+      .from("garmin_activities")
+      .select("activity_name, activity_type, duration_seconds, avg_hr, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds")
+      .gte("start_time", start.toISOString())
+      .lte("start_time", end.toISOString()),
+  ]);
+  const { data: activities, error: activitiesErr } = activitiesRes;
 
   // Every non-strength activity, with both its raw duration and its
-  // computed intensity contribution -- kept for the click-through detail
-  // even at 0 intensity minutes, so an easy zone-1/2 walk shows up
+  // classified intensity contribution -- kept for the click-through
+  // detail even at 0 intensity minutes, so an easy walk shows up
   // *explaining* why it added lots of duration but no intensity, instead
   // of just disappearing and leaving the gap between the two numbers
   // looking unexplained.
@@ -1056,9 +1112,7 @@ export async function loadTrainingEmphasis(start, end) {
       .forEach((a) => {
         const durationMin = (a.duration_seconds || 0) / 60;
         cardioMinutes += durationMin;
-        const moderateMin = (a.hr_zone_3_seconds || 0) / 60;
-        const vigorousMin = ((a.hr_zone_4_seconds || 0) + (a.hr_zone_5_seconds || 0)) / 60;
-        const intensityMin = moderateMin + 2 * vigorousMin;
+        const intensityMin = activityIntensityMinutes(a, durationMin, estimatedMaxHR);
         cardioActivityBreakdown.push({ label: a.activity_name || a.activity_type, durationMin, intensityMin });
       });
   }
@@ -1162,7 +1216,7 @@ export function renderCardioIntensityDetail(container) {
   container.innerHTML = "";
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>Cardio — Intensity Minutes</h4><p class="muted small">Every cardio activity in range: duration vs. its intensity contribution (HR-zone-3 min + 2× HR-zone-4/5 min). Low-effort time (an easy walk, say) adds duration but little or no intensity -- that's expected, not a bug.</p>`;
+  header.innerHTML = `<h4>Cardio — Intensity Minutes</h4><p class="muted small">Every cardio activity in range: duration vs. its intensity contribution (moderate-effort minutes + 2× vigorous-effort minutes, from real HR-zone data when Garmin has it, estimated from average heart rate otherwise). Low-effort time (an easy walk, say) adds duration but little or no intensity -- that's expected, not a bug.</p>`;
   container.appendChild(header);
 
   const activities = cache.cardioActivityBreakdown || [];
@@ -1192,21 +1246,34 @@ export function renderCardioIntensityDetail(container) {
 // A period-average distribution across zones 1 (easiest) to 5 (max
 // effort) -- same stacked-bar pattern as the Sleep Duration card's stage
 // breakdown, answering the same "not all cardio is equal" question but
-// for exertion instead of sleep depth.
+// for exertion instead of sleep depth. Real per-second zone data is used
+// when Garmin has it; for activities that don't (older ones synced before
+// sync/garmin_sync.py started fetching it properly, or a rare fetch
+// failure), the whole activity's duration is credited to a single zone
+// classified from its avg_hr instead -- see activityIntensityMinutes.
 export async function loadCardioZones(start, end) {
-  const { data, error } = await supabase
-    .from("garmin_activities")
-    .select("activity_type, hr_zone_1_seconds, hr_zone_2_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds")
-    .gte("start_time", start.toISOString())
-    .lte("start_time", end.toISOString());
+  const [estimatedMaxHR, activitiesRes] = await Promise.all([
+    getEstimatedMaxHR(),
+    supabase
+      .from("garmin_activities")
+      .select("activity_type, duration_seconds, avg_hr, hr_zone_1_seconds, hr_zone_2_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds")
+      .gte("start_time", start.toISOString())
+      .lte("start_time", end.toISOString()),
+  ]);
+  const { data, error } = activitiesRes;
   const zones = [1, 2, 3, 4, 5].map((n) => ({ n, seconds: 0 }));
   if (!error) {
     (data || [])
       .filter((a) => !NON_CARDIO_ACTIVITY_TYPES.has(a.activity_type))
       .forEach((a) => {
-        zones.forEach((z) => {
-          z.seconds += a[`hr_zone_${z.n}_seconds`] || 0;
-        });
+        if (a.hr_zone_3_seconds != null) {
+          zones.forEach((z) => {
+            z.seconds += a[`hr_zone_${z.n}_seconds`] || 0;
+          });
+        } else {
+          const zone = classifyZone(a.avg_hr, estimatedMaxHR);
+          if (zone >= 1) zones[zone - 1].seconds += a.duration_seconds || 0;
+        }
       });
   }
   return zones;

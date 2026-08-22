@@ -171,6 +171,39 @@ def sync_day(garmin, date_str):
 EXCLUDED_ACTIVITY_NAMES = ["pauwi"]
 
 
+def fetch_hr_zones(garmin, activity_id):
+    """Real per-activity HR-zone-time breakdown, via garminconnect's
+    dedicated get_activity_hr_in_timezones() endpoint -- NOT the same as
+    the hrTimeInZone_1..5 fields sometimes present inline on the basic
+    activity list, which turned out to be populated on roughly 1 in 10
+    real activities (Garmin just doesn't inline this for most activity
+    types). This hits Garmin's actual per-activity hrTimeInZones endpoint,
+    which has it far more reliably.
+
+    Expected shape (best guess, like everything else in this file): a list
+    of {"zoneNumber": 1-5, "secsInZone": seconds}. Parsed defensively --
+    returns all-None if the shape doesn't match or the call fails, so one
+    bad activity can't break the whole sync; the raw response isn't kept
+    here (only the flattened attempt), unlike the daily-stats/activity
+    fields above, since this is already a secondary per-item call.
+    """
+    empty = {f"hr_zone_{n}_seconds": None for n in range(1, 6)}
+    try:
+        zones = garmin.get_activity_hr_in_timezones(activity_id)
+    except Exception as e:
+        print(f"  ! hr zones failed for activity {activity_id}: {e}", file=sys.stderr)
+        return empty
+    if not isinstance(zones, list):
+        return empty
+    result = dict(empty)
+    for z in zones:
+        n = z.get("zoneNumber") or z.get("zone_number")
+        secs = z.get("secsInZone") or z.get("secs_in_zone")
+        if n in (1, 2, 3, 4, 5) and secs is not None:
+            result[f"hr_zone_{n}_seconds"] = secs
+    return result
+
+
 def sync_activities(garmin, limit=20):
     activities = garmin.get_activities(0, limit) or []
     rows = []
@@ -178,11 +211,23 @@ def sync_activities(garmin, limit=20):
         name = a.get("activityName") or ""
         if any(x in name.lower() for x in EXCLUDED_ACTIVITY_NAMES):
             continue
+        activity_type = (a.get("activityType") or {}).get("typeKey")
+        # Skip the extra API call for strength sessions -- they're excluded
+        # from every cardio stat downstream anyway, so their zone data is
+        # never read.
+        zones = {f"hr_zone_{n}_seconds": a.get(f"hrTimeInZone_{n}") for n in range(1, 6)}
+        if activity_type != "strength_training" and a.get("activityId"):
+            fetched = fetch_hr_zones(garmin, a["activityId"])
+            # Prefer the real per-activity fetch; fall back to whatever (if
+            # anything) was inline on the list response.
+            for key, val in fetched.items():
+                if val is not None:
+                    zones[key] = val
         rows.append(
             {
                 "id": a.get("activityId"),
                 "activity_name": name,
-                "activity_type": (a.get("activityType") or {}).get("typeKey"),
+                "activity_type": activity_type,
                 "start_time": a.get("startTimeGMT"),
                 "duration_seconds": a.get("duration"),
                 "distance_meters": a.get("distance"),
@@ -201,11 +246,7 @@ def sync_activities(garmin, limit=20):
                 "anaerobic_training_effect": a.get("anaerobicTrainingEffect"),
                 "training_effect_label": a.get("trainingEffectLabel"),
                 "activity_training_load": a.get("activityTrainingLoad"),
-                "hr_zone_1_seconds": a.get("hrTimeInZone_1"),
-                "hr_zone_2_seconds": a.get("hrTimeInZone_2"),
-                "hr_zone_3_seconds": a.get("hrTimeInZone_3"),
-                "hr_zone_4_seconds": a.get("hrTimeInZone_4"),
-                "hr_zone_5_seconds": a.get("hrTimeInZone_5"),
+                **zones,
                 "raw": a,
             }
         )
