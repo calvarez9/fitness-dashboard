@@ -1007,21 +1007,27 @@ const NON_CARDIO_ACTIVITY_TYPES = new Set(["strength_training"]);
 // framing at all. Explosive Sets is a plain count of sets from movements
 // tagged athleticism >= 1 (jumps, throws, Olympic lifts -- see
 // exerciseLibrary.js); ordinary compound lifts' smaller athleticism credit
-// no longer feeds anything here, same spirit as Strength Working Sets just
-// counting, not weighting. Cardio Intensity Minutes is Garmin's own
-// published metric (moderate minutes + 2x vigorous minutes) -- a real,
-// externally-defined unit (WHO's guidance is framed in these same
-// minutes), not something we invented.
+// Cardio Intensity Minutes is Garmin's own published metric (moderate
+// minutes + 2x vigorous minutes) -- a real, externally-defined unit
+// (WHO's guidance is framed in these same minutes), not something we
+// invented. Athleticism is the original weighted sum (isolation 0,
+// compound 0.2-0.4/set, explosive 1.0-2.0/set) -- kept alongside the
+// plain Explosive count rather than replaced by it, since the two answer
+// different questions: Explosive is "how much true power work," while
+// Athleticism captures compound lifts' smaller athletic contribution too.
 export async function loadTrainingEmphasis(start, end) {
   let strengthSets = 0;
   let explosiveSets = 0;
+  let athleticismScore = 0;
   let cardioMinutes = 0;
 
   for (const sets of cache.setsByWorkout.values()) {
     sets.forEach((s) => {
       if (s.is_warmup) return;
       strengthSets += 1;
-      if ((resolveExerciseMeta(s.exercise_name).athleticism || 0) >= 1) explosiveSets += 1;
+      const athleticism = resolveExerciseMeta(s.exercise_name).athleticism || 0;
+      if (athleticism >= 1) explosiveSets += 1;
+      athleticismScore += athleticism;
     });
   }
   for (const segments of cache.segmentsByWorkout.values()) {
@@ -1044,36 +1050,49 @@ export async function loadTrainingEmphasis(start, end) {
     .gte("start_time", start.toISOString())
     .lte("start_time", end.toISOString());
 
-  const cardioIntensityByActivity = [];
+  // Every non-strength activity, with both its raw duration and its
+  // computed intensity contribution -- kept for the click-through detail
+  // even at 0 intensity minutes, so an easy zone-1/2 walk shows up
+  // *explaining* why it added lots of duration but no intensity, instead
+  // of just disappearing and leaving the gap between the two numbers
+  // looking unexplained.
+  const cardioActivityBreakdown = [];
   if (!activitiesErr) {
     (activities || [])
       .filter((a) => !NON_CARDIO_ACTIVITY_TYPES.has(a.activity_type))
       .forEach((a) => {
-        cardioMinutes += (a.duration_seconds || 0) / 60;
+        const durationMin = (a.duration_seconds || 0) / 60;
+        cardioMinutes += durationMin;
         const moderateMin = (a.hr_zone_3_seconds || 0) / 60;
         const vigorousMin = ((a.hr_zone_4_seconds || 0) + (a.hr_zone_5_seconds || 0)) / 60;
-        const intensity = moderateMin + 2 * vigorousMin;
-        if (intensity > 0) cardioIntensityByActivity.push({ label: a.activity_name || a.activity_type, minutes: intensity });
+        const intensityMin = moderateMin + 2 * vigorousMin;
+        cardioActivityBreakdown.push({ label: a.activity_name || a.activity_type, durationMin, intensityMin });
       });
   }
-  cache.cardioIntensityByActivity = cardioIntensityByActivity; // for the click-through detail, avoids a second fetch
-  const cardioIntensityMinutes = cardioIntensityByActivity.reduce((sum, a) => sum + a.minutes, 0);
+  cache.cardioActivityBreakdown = cardioActivityBreakdown; // for the click-through detail, avoids a second fetch
+  const cardioIntensityMinutes = cardioActivityBreakdown.reduce((sum, a) => sum + a.intensityMin, 0);
 
   return {
     strengthSets: Math.round(strengthSets),
     explosiveSets: Math.round(explosiveSets),
+    athleticismScore: Math.round(athleticismScore * 10) / 10,
     cardioMinutes: Math.round(cardioMinutes),
     cardioIntensityMinutes: Math.round(cardioIntensityMinutes),
   };
 }
 
-export function renderTrainingEmphasis(container, { strengthSets, explosiveSets, cardioMinutes, cardioIntensityMinutes }, onOpen) {
+export function renderTrainingEmphasis(container, { strengthSets, explosiveSets, athleticismScore, cardioMinutes, cardioIntensityMinutes }, onOpen) {
   container.innerHTML = `
     <div class="stat-row emphasis-row">
       <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="strength">
         <div class="stat-label">Strength</div>
         <div class="stat-value">${strengthSets}</div>
         <div class="stat-sub">working sets</div>
+      </button>
+      <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="athleticism">
+        <div class="stat-label">Athleticism</div>
+        <div class="stat-value">${athleticismScore}</div>
+        <div class="stat-sub">weighted score</div>
       </button>
       <button type="button" class="stat-tile stat-tile-clickable" data-emphasis="explosive">
         <div class="stat-label">Explosive</div>
@@ -1086,7 +1105,7 @@ export function renderTrainingEmphasis(container, { strengthSets, explosiveSets,
         <div class="stat-sub">intensity min · ${cardioMinutes} min total</div>
       </button>
     </div>
-    <p class="muted small">Explosive Sets counts jumps/throws/Olympic lifts specifically -- ordinary compound lifts count toward Strength but not this. Cardio Intensity Minutes is Garmin's own metric (moderate minutes + 2× vigorous minutes) -- the same framing WHO's activity guidelines use. Tap any of these to see what's contributing.</p>
+    <p class="muted small">Athleticism sums each set's tagged score (isolation 0, compound 0.2–0.4, explosive 1.0–2.0) -- Explosive is just the count of sets at that high end, on its own. Cardio Intensity Minutes is Garmin's own metric (moderate + 2× vigorous minutes) -- the same framing WHO's guidelines use. Tap any of these to see what's contributing.</p>
   `;
   if (onOpen) {
     container.querySelectorAll("[data-emphasis]").forEach((btn) => {
@@ -1104,16 +1123,20 @@ function renderSetCountDetail(container, title, subtitle, creditFn, onOpenExerci
   header.innerHTML = `<h4>${esc(title)}</h4>${subtitle ? `<p class="muted small">${esc(subtitle)}</p>` : ""}`;
   container.appendChild(header);
 
-  const totals = new Map(); // exercise_name -> set count
+  // creditFn returns a number per set (0/falsy = excluded) -- 1 for a
+  // plain count (Strength, Explosive), the actual tagged value for a
+  // weighted sum (Athleticism).
+  const totals = new Map(); // exercise_name -> summed credit
   for (const sets of cache.setsByWorkout.values()) {
     sets.forEach((s) => {
       if (s.is_warmup) return;
-      if (!creditFn(resolveExerciseMeta(s.exercise_name))) return;
-      totals.set(s.exercise_name, (totals.get(s.exercise_name) || 0) + 1);
+      const credit = creditFn(resolveExerciseMeta(s.exercise_name));
+      if (!credit) return;
+      totals.set(s.exercise_name, (totals.get(s.exercise_name) || 0) + credit);
     });
   }
 
-  const rows = [...totals.entries()].map(([name, sets]) => ({ label: name, value: sets })).sort((a, b) => b.value - a.value);
+  const rows = [...totals.entries()].map(([name, val]) => ({ label: name, value: Math.round(val * 10) / 10 })).sort((a, b) => b.value - a.value);
   if (!rows.length) {
     container.appendChild(emptyNote("No sets in range."));
     return;
@@ -1126,7 +1149,17 @@ function renderSetCountDetail(container, title, subtitle, creditFn, onOpenExerci
 }
 
 export function renderStrengthEmphasisDetail(container, onOpenExercise) {
-  renderSetCountDetail(container, "Strength — Working Sets", null, () => true, onOpenExercise);
+  renderSetCountDetail(container, "Strength — Working Sets", null, () => 1, onOpenExercise);
+}
+
+export function renderAthleticismDetail(container, onOpenExercise) {
+  renderSetCountDetail(
+    container,
+    "Athleticism — Weighted Score",
+    "Each set's tagged score, summed: isolation 0, compound lifts 0.2–0.4, explosive/power work 1.0–2.0.",
+    (meta) => meta.athleticism || 0,
+    onOpenExercise
+  );
 }
 
 export function renderExplosiveDetail(container, onOpenExercise) {
@@ -1134,7 +1167,7 @@ export function renderExplosiveDetail(container, onOpenExercise) {
     container,
     "Explosive — Power Sets",
     "Sets from movements tagged athleticism ≥ 1 (jumps, throws, Olympic lifts).",
-    (meta) => (meta.athleticism || 0) >= 1,
+    (meta) => ((meta.athleticism || 0) >= 1 ? 1 : 0),
     onOpenExercise
   );
 }
@@ -1142,25 +1175,40 @@ export function renderExplosiveDetail(container, onOpenExercise) {
 // Breakdown by activity (not exercise -- there's no FitLog exercise to
 // click into here) -- reads straight from the cache loadTrainingEmphasis
 // already populated, same "reuse what's already loaded" approach as the
-// other detail views.
+// other detail views. Lists *every* cardio activity, not just the ones
+// that contributed intensity minutes -- an easy zone-1/2 walk shows here
+// too, at 0 intensity, so the gap between "1885 min total" and a much
+// smaller intensity-minutes number is visible and explained instead of
+// looking like a bug (a light walk genuinely doesn't count as WHO's
+// "moderate" or "vigorous" activity, only the harder sessions do).
 export function renderCardioIntensityDetail(container) {
   container.innerHTML = "";
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>Cardio — Intensity Minutes</h4><p class="muted small">Per cardio activity: HR-zone-3 minutes + 2× HR-zone-4/5 minutes. Strength sessions excluded.</p>`;
+  header.innerHTML = `<h4>Cardio — Intensity Minutes</h4><p class="muted small">Every cardio activity in range: duration vs. its intensity contribution (HR-zone-3 min + 2× HR-zone-4/5 min). Low-effort time (an easy walk, say) adds duration but little or no intensity -- that's expected, not a bug.</p>`;
   container.appendChild(header);
 
-  const activities = cache.cardioIntensityByActivity || [];
+  const activities = cache.cardioActivityBreakdown || [];
   if (!activities.length) {
-    container.appendChild(emptyNote("No intensity minutes in range."));
+    container.appendChild(emptyNote("No cardio activity in range."));
     return;
   }
 
-  const rows = activities.map((a) => ({ label: a.label, value: Math.round(a.minutes * 10) / 10 })).sort((a, b) => b.value - a.value);
+  const sorted = [...activities].sort((a, b) => b.durationMin - a.durationMin);
   const list = document.createElement("div");
-  list.className = "bar-list";
+  list.className = "workout-list";
   container.appendChild(list);
-  renderBarList(list, rows);
+  sorted.forEach((a) => {
+    const row = document.createElement("div");
+    row.className = "workout-row";
+    row.innerHTML = `
+      <span class="workout-row-main">
+        <span class="workout-row-name">${esc(a.label)}</span>
+        <span class="workout-row-sub">${Math.round(a.durationMin)} min · ${Math.round(a.intensityMin * 10) / 10} intensity min</span>
+      </span>
+    `;
+    list.appendChild(row);
+  });
 }
 
 // ---------- Cardio intensity: time in each HR zone ----------
