@@ -42,7 +42,12 @@ async function fetchPeriodSummary(start, end) {
   const endISO = isoDate(end);
   const [dailyRes, activitiesRes, workoutsRes] = await Promise.all([
     supabase.from("garmin_daily_stats").select("resting_hr, avg_stress").gte("date", startISO).lte("date", endISO),
-    supabase.from("garmin_activities").select("distance_meters").gte("start_time", start.toISOString()).lte("start_time", end.toISOString()),
+    supabase
+      .from("garmin_activities")
+      .select("distance_meters")
+      .neq("activity_type", "strength_training")
+      .gte("start_time", start.toISOString())
+      .lte("start_time", end.toISOString()),
     supabase.from("fitlog_workouts").select("id, type").gte("date", start.toISOString()).lte("date", end.toISOString()),
   ]);
   for (const r of [dailyRes, activitiesRes, workoutsRes]) if (r.error) throw r.error;
@@ -80,7 +85,7 @@ export async function loadDashboard(days) {
       .order("date", { ascending: true }),
     supabase
       .from("garmin_activities")
-      .select("start_time, distance_meters, duration_seconds")
+      .select("start_time, distance_meters, duration_seconds, activity_type")
       .gte("start_time", start.toISOString())
       .lte("start_time", end.toISOString()),
     supabase
@@ -97,6 +102,11 @@ export async function loadDashboard(days) {
 
   const daily = dailyRes.data || [];
   const activities = activitiesRes.data || [];
+  // A Garmin-auto-detected "Strength" activity isn't cardio -- excluded
+  // from cardio-specific stats/charts below, but `activities` itself stays
+  // unfiltered for the consistency heatmap, which cares about "did
+  // something that day" regardless of type.
+  const cardioActivities = activities.filter((a) => a.activity_type !== "strength_training");
   const workouts = workoutsRes.data || [];
 
   const strengthWorkoutIds = workouts.filter((w) => w.type !== "cardio").map((w) => w.id);
@@ -115,7 +125,7 @@ export async function loadDashboard(days) {
   const priorStart = new Date(priorEnd.getTime() - days * 24 * 60 * 60 * 1000);
   const priorSummary = await fetchPeriodSummary(priorStart, priorEnd);
 
-  renderStats({ daily, activities, workouts, priorSummary });
+  renderStats({ daily, activities: cardioActivities, workouts, priorSummary });
   renderHeatmap({ start, end, workouts, activities });
 
   renderTrendChart(
@@ -170,7 +180,7 @@ export async function loadDashboard(days) {
 
   // Cardio distance per week, from Garmin activities
   const weeklyDistance = {};
-  activities.forEach((a) => {
+  cardioActivities.forEach((a) => {
     if (!a.distance_meters) return;
     const wk = weekKey(new Date(a.start_time));
     weeklyDistance[wk] = (weeklyDistance[wk] || 0) + a.distance_meters * MI_PER_METER;

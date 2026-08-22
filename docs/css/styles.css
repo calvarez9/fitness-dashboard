@@ -164,6 +164,15 @@ main#content { padding: 16px 16px 60px; }
 .sleep-stage-dot.stage-rem { background: var(--series-3); }
 .sleep-stage-dot.stage-awake { background: var(--text-muted); }
 
+/* ---------- Cardio HR-zone breakdown (reuses .sleep-stage-* layout) ----------
+   A sequential low->high effort ramp, not categorical colors -- zones are
+   ordered, so the palette should read as a gradient, not five arbitrary hues. */
+.sleep-stage-seg.hr-zone-1, .sleep-stage-dot.hr-zone-1 { background: var(--series-1); }
+.sleep-stage-seg.hr-zone-2, .sleep-stage-dot.hr-zone-2 { background: var(--series-3); }
+.sleep-stage-seg.hr-zone-3, .sleep-stage-dot.hr-zone-3 { background: var(--warning); }
+.sleep-stage-seg.hr-zone-4, .sleep-stage-dot.hr-zone-4 { background: var(--series-2); }
+.sleep-stage-seg.hr-zone-5, .sleep-stage-dot.hr-zone-5 { background: var(--critical); }
+
 /* ---------- Search ---------- */
 .search-card { display: flex; flex-direction: column; gap: 8px; }
 #searchResults:empty { display: none; }

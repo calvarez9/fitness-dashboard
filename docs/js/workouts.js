@@ -861,15 +861,25 @@ export function renderPRBoard(container, onOpenExercise) {
   });
 }
 
+// A Garmin-auto-detected "Strength" activity duplicates what's already
+// counted via logged sets above -- excluded here (and from the cardio zone
+// breakdown below) so it doesn't also inflate cardio numbers.
+const NON_CARDIO_ACTIVITY_TYPES = new Set(["strength_training"]);
+
 // ---------- Training Emphasis: Strength / Athleticism / Cardio ----------
 // Deliberately three numbers in their own native units (sets / weighted
-// score / minutes) rather than one normalized chart -- see the reasoning
-// discussed with the user: forcing cardio minutes onto a "sets" scale (or
-// vice versa) would be more misleading than honest.
+// score / training load) rather than one normalized chart -- see the
+// reasoning discussed with the user: forcing cardio onto a "sets" scale
+// (or vice versa) would be more misleading than honest. Cardio itself
+// used to just be raw minutes, which treats a 30-minute walk the same as
+// a 10-minute interval session -- now led by Garmin's own per-activity
+// training load (Firstbeat-modeled effort, not just duration), with
+// minutes kept as supporting context underneath.
 export async function loadTrainingEmphasis(start, end) {
   let strengthSets = 0;
   let athleticismScore = 0;
   let cardioMinutes = 0;
+  let cardioLoad = 0;
 
   for (const sets of cache.setsByWorkout.values()) {
     sets.forEach((s) => {
@@ -886,21 +896,27 @@ export async function loadTrainingEmphasis(start, end) {
 
   const { data, error } = await supabase
     .from("garmin_activities")
-    .select("duration_seconds")
+    .select("duration_seconds, activity_type, activity_training_load")
     .gte("start_time", start.toISOString())
     .lte("start_time", end.toISOString());
   if (!error) {
-    cardioMinutes += (data || []).reduce((sum, a) => sum + (a.duration_seconds || 0) / 60, 0);
+    (data || [])
+      .filter((a) => !NON_CARDIO_ACTIVITY_TYPES.has(a.activity_type))
+      .forEach((a) => {
+        cardioMinutes += (a.duration_seconds || 0) / 60;
+        cardioLoad += a.activity_training_load || 0;
+      });
   }
 
   return {
     strengthSets: Math.round(strengthSets),
     athleticismScore: Math.round(athleticismScore * 10) / 10,
     cardioMinutes: Math.round(cardioMinutes),
+    cardioLoad: Math.round(cardioLoad),
   };
 }
 
-export function renderTrainingEmphasis(container, { strengthSets, athleticismScore, cardioMinutes }) {
+export function renderTrainingEmphasis(container, { strengthSets, athleticismScore, cardioMinutes, cardioLoad }) {
   container.innerHTML = `
     <div class="stat-row emphasis-row">
       <div class="stat-tile">
@@ -914,12 +930,58 @@ export function renderTrainingEmphasis(container, { strengthSets, athleticismSco
         <div class="stat-sub">weighted score</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-label">Cardio</div>
-        <div class="stat-value">${cardioMinutes}</div>
-        <div class="stat-sub">minutes</div>
+        <div class="stat-label">Cardio Load</div>
+        <div class="stat-value">${cardioLoad}</div>
+        <div class="stat-sub">${cardioMinutes} min total</div>
       </div>
     </div>
-    <p class="muted small">Athleticism weights each set by movement: isolation work counts 0, compound lifts ~0.2–0.4/set, explosive or power work (jumps, throws, Olympic lifts) 1.0–2.0/set.</p>
+    <p class="muted small">Athleticism weights each set by movement: isolation work counts 0, compound lifts ~0.2–0.4/set, explosive or power work (jumps, throws, Olympic lifts) 1.0–2.0/set. Cardio Load is Garmin's own per-session training-load number (effort-weighted, not just duration) summed across the range.</p>
+  `;
+}
+
+// ---------- Cardio intensity: time in each HR zone ----------
+// A period-average distribution across zones 1 (easiest) to 5 (max
+// effort) -- same stacked-bar pattern as the Sleep Duration card's stage
+// breakdown, answering the same "not all cardio is equal" question but
+// for exertion instead of sleep depth.
+export async function loadCardioZones(start, end) {
+  const { data, error } = await supabase
+    .from("garmin_activities")
+    .select("activity_type, hr_zone_1_seconds, hr_zone_2_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds")
+    .gte("start_time", start.toISOString())
+    .lte("start_time", end.toISOString());
+  const zones = [1, 2, 3, 4, 5].map((n) => ({ n, seconds: 0 }));
+  if (!error) {
+    (data || [])
+      .filter((a) => !NON_CARDIO_ACTIVITY_TYPES.has(a.activity_type))
+      .forEach((a) => {
+        zones.forEach((z) => {
+          z.seconds += a[`hr_zone_${z.n}_seconds`] || 0;
+        });
+      });
+  }
+  return zones;
+}
+
+const ZONE_LABEL = { 1: "Zone 1 · Easy", 2: "Zone 2 · Base", 3: "Zone 3 · Tempo", 4: "Zone 4 · Threshold", 5: "Zone 5 · Max" };
+const ZONE_CLASS = { 1: "hr-zone-1", 2: "hr-zone-2", 3: "hr-zone-3", 4: "hr-zone-4", 5: "hr-zone-5" };
+
+export function renderCardioZones(container, zones) {
+  const total = zones.reduce((sum, z) => sum + z.seconds, 0);
+  if (!total) {
+    container.innerHTML = `<p class="chart-empty">No cardio activity in range yet.</p>`;
+    return;
+  }
+  const bar = zones
+    .filter((z) => z.seconds > 0)
+    .map((z) => `<div class="sleep-stage-seg ${ZONE_CLASS[z.n]}" style="width:${(z.seconds / total) * 100}%"></div>`)
+    .join("");
+  const legend = zones
+    .map((z) => `<span class="sleep-stage-legend-item"><span class="sleep-stage-dot ${ZONE_CLASS[z.n]}"></span>${ZONE_LABEL[z.n]} ${Math.round(z.seconds / 60)}m</span>`)
+    .join("");
+  container.innerHTML = `
+    <div class="sleep-stage-bar">${bar}</div>
+    <div class="sleep-stage-legend">${legend}</div>
   `;
 }
 

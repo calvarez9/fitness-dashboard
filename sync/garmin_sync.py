@@ -201,6 +201,11 @@ def sync_activities(garmin, limit=20):
                 "anaerobic_training_effect": a.get("anaerobicTrainingEffect"),
                 "training_effect_label": a.get("trainingEffectLabel"),
                 "activity_training_load": a.get("activityTrainingLoad"),
+                "hr_zone_1_seconds": a.get("hrTimeInZone_1"),
+                "hr_zone_2_seconds": a.get("hrTimeInZone_2"),
+                "hr_zone_3_seconds": a.get("hrTimeInZone_3"),
+                "hr_zone_4_seconds": a.get("hrTimeInZone_4"),
+                "hr_zone_5_seconds": a.get("hrTimeInZone_5"),
                 "raw": a,
             }
         )

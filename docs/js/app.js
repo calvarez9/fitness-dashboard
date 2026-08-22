@@ -19,6 +19,8 @@ import {
   loadJointLoad,
   renderJointLoad,
   renderJointDetail,
+  loadCardioZones,
+  renderCardioZones,
 } from "./workouts.js";
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
@@ -93,6 +95,9 @@ async function refreshWorkouts(days) {
 
   const jointLoad = await loadJointLoad(start, end);
   renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
+
+  const cardioZones = await loadCardioZones(start, end);
+  renderCardioZones($("#cardioZones"), cardioZones);
 
   renderWorkoutsList($("#workoutsList"), (id) => pushModal("workout", id));
   makeCollapsible($("#workoutsList"));
