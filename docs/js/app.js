@@ -18,6 +18,7 @@ import {
   renderTrainingEmphasis,
   loadJointLoad,
   renderJointLoad,
+  renderJointDetail,
 } from "./workouts.js";
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
@@ -60,6 +61,7 @@ function renderModalTop() {
   else if (top.type === "exercise") renderExerciseDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "muscle") renderMuscleDetail(body, top.payload, (name) => pushModal("exercise", name));
+  else if (top.type === "joint") renderJointDetail(body, top.payload, (name) => pushModal("exercise", name));
 }
 
 function pushModal(type, payload) {
@@ -90,7 +92,7 @@ async function refreshWorkouts(days) {
   renderTrainingEmphasis($("#trainingEmphasis"), emphasis);
 
   const jointLoad = await loadJointLoad(start, end);
-  renderJointLoad($("#jointLoad"), jointLoad);
+  renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
 
   renderWorkoutsList($("#workoutsList"), (id) => pushModal("workout", id));
   makeCollapsible($("#workoutsList"));

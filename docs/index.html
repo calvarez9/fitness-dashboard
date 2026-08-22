@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821u" />
+<link rel="stylesheet" href="css/styles.css?v=20260821v" />
 </head>
 <body>
 <div id="app">
@@ -54,8 +54,6 @@
     </header>
 
     <main id="content">
-
-      <section class="stat-row" id="statRow"></section>
 
       <nav class="tab-nav" id="tabNav">
         <button type="button" class="tab-btn" data-tab="health">Health</button>
@@ -143,6 +141,31 @@
         </section>
 
         <section class="chart-section">
+          <h2>Muscle Volume</h2>
+          <div class="chart-card">
+            <div class="bodymap-row">
+              <figure class="bodymap-figure">
+                <svg id="bodyFront"></svg>
+                <figcaption>Front</figcaption>
+              </figure>
+              <figure class="bodymap-figure">
+                <svg id="bodyBack"></svg>
+                <figcaption>Back</figcaption>
+              </figure>
+            </div>
+            <div id="barMuscles" class="bar-list"></div>
+            <p id="unmatchedNote" class="muted small" hidden></p>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Movement Pattern Volume</h2>
+          <div class="chart-card">
+            <div id="barMovements" class="bar-list"></div>
+          </div>
+        </section>
+
+        <section class="chart-section">
           <h2>Joint Load</h2>
           <div class="chart-card">
             <div id="jointLoad"></div>
@@ -178,31 +201,6 @@
         </section>
 
         <section class="chart-section">
-          <h2>Movement Pattern Volume</h2>
-          <div class="chart-card">
-            <div id="barMovements" class="bar-list"></div>
-          </div>
-        </section>
-
-        <section class="chart-section">
-          <h2>Muscle Volume</h2>
-          <div class="chart-card">
-            <div class="bodymap-row">
-              <figure class="bodymap-figure">
-                <svg id="bodyFront"></svg>
-                <figcaption>Front</figcaption>
-              </figure>
-              <figure class="bodymap-figure">
-                <svg id="bodyBack"></svg>
-                <figcaption>Back</figcaption>
-              </figure>
-            </div>
-            <div id="barMuscles" class="bar-list"></div>
-            <p id="unmatchedNote" class="muted small" hidden></p>
-          </div>
-        </section>
-
-        <section class="chart-section">
           <h2>Cardio Distance/Week</h2>
           <div class="chart-card">
             <svg id="chartCardio" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
@@ -213,6 +211,8 @@
 
       <!-- ===== CALENDAR ===== -->
       <div class="tab-panel" data-tab="calendar" hidden>
+
+        <section class="stat-row" id="statRow"></section>
 
         <section class="chart-section">
           <div class="cal-header">
@@ -296,6 +296,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821u"></script>
+<script type="module" src="js/app.js?v=20260821v"></script>
 </body>
 </html>

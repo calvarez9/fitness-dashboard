@@ -1,6 +1,6 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
-import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS } from "./exerciseLibrary.js";
+import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js";
 import { renderBarList, renderProgressChart } from "./charts.js";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
@@ -984,18 +984,57 @@ function jointDeltaText(current, prev) {
   return `${pct > 0 ? "+" : ""}${pct}% vs prior period`;
 }
 
-export function renderJointLoad(container, { current, prev }) {
+export function renderJointLoad(container, { current, prev }, onOpenJoint) {
   container.innerHTML = `
     <div class="stat-row emphasis-row">
       ${JOINTS.map((j) => {
         const val = Math.round(current[j.key] * 10) / 10;
-        return `<div class="stat-tile">
+        return `<button type="button" class="stat-tile stat-tile-clickable" data-joint="${j.key}">
           <div class="stat-label">${esc(j.label)}</div>
           <div class="stat-value">${val}</div>
           <div class="stat-sub">${jointDeltaText(current[j.key], prev[j.key])}</div>
-        </div>`;
+        </button>`;
       }).join("")}
     </div>
-    <p class="muted small">Sets in the selected range weighted by how much each exercise loads that joint, compared to the same-length period right before it -- a fatigue signal, not a score to chase.</p>
+    <p class="muted small">Sets in the selected range weighted by how much each exercise loads that joint, compared to the same-length period right before it -- a fatigue signal, not a score to chase. Tap a joint to see what's contributing.</p>
   `;
+  if (onOpenJoint) {
+    container.querySelectorAll("[data-joint]").forEach((btn) => {
+      btn.addEventListener("click", () => onOpenJoint(btn.dataset.joint));
+    });
+  }
+}
+
+// Which exercises (in the currently-loaded range) are contributing to one
+// joint's load, and how much -- same "contribution breakdown" pattern as
+// renderMovementDetail/renderMuscleDetail above.
+export function renderJointDetail(container, jointKey, onOpenExercise) {
+  container.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>${esc(JOINT_LABEL[jointKey] || jointKey)}</h4>`;
+  container.appendChild(header);
+
+  const totals = new Map(); // exercise_name -> joint-load-weighted credited sets
+  for (const sets of cache.setsByWorkout.values()) {
+    sets.forEach((s) => {
+      if (s.is_warmup) return;
+      const load = resolveExerciseMeta(s.exercise_name).jointLoad?.[jointKey];
+      if (!load) return;
+      totals.set(s.exercise_name, (totals.get(s.exercise_name) || 0) + load);
+    });
+  }
+
+  const rows = [...totals.entries()]
+    .map(([name, credit]) => ({ label: name, value: round(credit) }))
+    .sort((a, b) => b.value - a.value);
+  if (!rows.length) {
+    container.appendChild(emptyNote("No exercises in range."));
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "bar-list";
+  container.appendChild(list);
+  renderBarList(list, rows, { onClick: (r) => onOpenExercise(r.label) });
 }

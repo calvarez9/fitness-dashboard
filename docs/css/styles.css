@@ -109,6 +109,8 @@ main#content { padding: 16px 16px 60px; }
 .stat-tile .stat-value { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; }
 .stat-tile .stat-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 .stat-tile .stat-delta { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+.stat-tile-clickable { display: block; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.stat-tile-clickable:hover { border-color: var(--text-muted); }
 
 /* ---------- Tabs ---------- */
 .tab-nav {
