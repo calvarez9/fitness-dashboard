@@ -1,4 +1,3 @@
-import { initAuth } from "./auth.js";
 import { loadDashboard } from "./dashboard.js";
 import { importFitLogBackup } from "./importFitLog.js";
 import { renderBarList, makeCollapsible } from "./charts.js";
@@ -376,19 +375,8 @@ function initDashboardUI() {
   refresh();
 }
 
-let dashboardInitialized = false;
-
-initAuth({
-  onSignedIn: () => {
-    $("#loginView").hidden = true;
-    $("#mainView").hidden = false;
-    if (!dashboardInitialized) {
-      dashboardInitialized = true;
-      initDashboardUI();
-    }
-  },
-  onSignedOut: () => {
-    $("#loginView").hidden = false;
-    $("#mainView").hidden = true;
-  },
-});
+// No login gate -- an explicit, informed choice (see schema/012), not an
+// oversight. Supabase is queried as the anon role from here on; the RLS
+// policies/grants in that migration are what make anon's requests
+// actually succeed instead of hitting permission errors everywhere.
+initDashboardUI();
