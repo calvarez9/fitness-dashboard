@@ -1,6 +1,6 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
-import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL, MOVEMENT_GROUPS } from "./exerciseLibrary.js";
+import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS } from "./exerciseLibrary.js";
 import { renderBarList, renderProgressChart } from "./charts.js";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
@@ -920,5 +920,82 @@ export function renderTrainingEmphasis(container, { strengthSets, athleticismSco
       </div>
     </div>
     <p class="muted small">Athleticism weights each set by movement: isolation work counts 0, compound lifts ~0.2–0.4/set, explosive or power work (jumps, throws, Olympic lifts) 1.0–2.0/set.</p>
+  `;
+}
+
+// ---------- Joint Load: Low Back / Knees / Shoulders ----------
+// A fatigue-management signal, not a volume metric -- each set contributes
+// (set count x that exercise's jointLoad weight for the joint), same
+// modeling approach as muscle/movement volume. Shown as selected-range vs
+// the immediately preceding period of equal length, same "current vs
+// prior" comparison already used for the health metrics.
+function tallyJointLoad(setsByWorkout) {
+  const totals = Object.fromEntries(JOINTS.map((j) => [j.key, 0]));
+  for (const sets of setsByWorkout.values()) {
+    sets.forEach((s) => {
+      if (s.is_warmup) return;
+      Object.entries(resolveExerciseMeta(s.exercise_name).jointLoad || {}).forEach(([joint, load]) => {
+        totals[joint] = (totals[joint] || 0) + load;
+      });
+    });
+  }
+  return totals;
+}
+
+export async function loadJointLoad(start, end) {
+  const current = tallyJointLoad(cache.setsByWorkout);
+
+  const rangeMs = end.getTime() - start.getTime();
+  const prevStart = new Date(start.getTime() - rangeMs);
+  const prevEnd = new Date(start.getTime());
+  const prev = Object.fromEntries(JOINTS.map((j) => [j.key, 0]));
+
+  const { data: prevWorkouts, error: wErr } = await supabase
+    .from("fitlog_workouts")
+    .select("id")
+    .gte("date", prevStart.toISOString())
+    .lt("date", prevEnd.toISOString());
+  if (!wErr && prevWorkouts?.length) {
+    const { data: prevSets, error: sErr } = await supabase
+      .from("fitlog_sets")
+      .select("exercise_name, is_warmup")
+      .in(
+        "workout_id",
+        prevWorkouts.map((w) => w.id)
+      );
+    if (!sErr) {
+      (prevSets || []).forEach((s) => {
+        if (s.is_warmup) return;
+        Object.entries(resolveExerciseMeta(s.exercise_name).jointLoad || {}).forEach(([joint, load]) => {
+          prev[joint] = (prev[joint] || 0) + load;
+        });
+      });
+    }
+  }
+
+  return { current, prev };
+}
+
+function jointDeltaText(current, prev) {
+  if (!current && !prev) return "no load logged";
+  if (!prev) return "new this period";
+  const pct = Math.round(((current - prev) / prev) * 100);
+  if (pct === 0) return "same as prior period";
+  return `${pct > 0 ? "+" : ""}${pct}% vs prior period`;
+}
+
+export function renderJointLoad(container, { current, prev }) {
+  container.innerHTML = `
+    <div class="stat-row emphasis-row">
+      ${JOINTS.map((j) => {
+        const val = Math.round(current[j.key] * 10) / 10;
+        return `<div class="stat-tile">
+          <div class="stat-label">${esc(j.label)}</div>
+          <div class="stat-value">${val}</div>
+          <div class="stat-sub">${jointDeltaText(current[j.key], prev[j.key])}</div>
+        </div>`;
+      }).join("")}
+    </div>
+    <p class="muted small">Sets in the selected range weighted by how much each exercise loads that joint, compared to the same-length period right before it -- a fatigue signal, not a score to chase.</p>
   `;
 }

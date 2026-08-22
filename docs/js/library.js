@@ -4,26 +4,26 @@
 // backed by the exercise_overrides table instead of localStorage, so it's
 // reachable from the dashboard directly rather than only from FitLog.
 import { supabase } from "./supabaseClient.js";
-import { MUSCLES, MOVEMENTS, MOVEMENT_LABEL, getAllExerciseEntries, setExerciseOverrides } from "./exerciseLibrary.js";
+import { MUSCLES, MOVEMENTS, MOVEMENT_LABEL, JOINTS, JOINT_LABEL, getAllExerciseEntries, setExerciseOverrides } from "./exerciseLibrary.js";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 export async function loadExerciseOverrides() {
-  const { data, error } = await supabase.from("exercise_overrides").select("name, movement, muscles, athleticism");
+  const { data, error } = await supabase.from("exercise_overrides").select("name, movement, muscles, athleticism, joint_load");
   if (error) throw error;
   setExerciseOverrides(data || []);
 }
 
-async function saveOverride({ name, movement, muscles, athleticism }, originalName) {
+async function saveOverride({ name, movement, muscles, athleticism, jointLoad }, originalName) {
   if (originalName && originalName !== name) {
     const { error } = await supabase.from("exercise_overrides").delete().eq("name", originalName);
     if (error) throw error;
   }
   const { error } = await supabase
     .from("exercise_overrides")
-    .upsert({ name, movement, muscles, athleticism: athleticism || 0 }, { onConflict: "name" });
+    .upsert({ name, movement, muscles, athleticism: athleticism || 0, joint_load: jointLoad || {} }, { onConflict: "name" });
   if (error) throw error;
 }
 
@@ -50,6 +50,8 @@ export function renderLibraryList(container, onOpen) {
     if (primary.length) bits.push(primary.join(", "));
     if (secondary.length) bits.push(`+${secondary.length} secondary`);
     if (ex.athleticism) bits.push(`⚡ ${ex.athleticism}`);
+    const joints = Object.entries(ex.jointLoad || {});
+    if (joints.length) bits.push(`🦴 ${joints.map(([k, v]) => `${JOINT_LABEL[k] || k} ${v}`).join(", ")}`);
 
     const row = document.createElement("button");
     row.type = "button";
@@ -87,6 +89,7 @@ export function renderExerciseForm(container, name, onDone) {
   const movement = existing?.movement || "squat";
   const muscles = existing?.muscles || {};
   const athleticism = existing?.athleticism || 0;
+  const jointLoad = existing?.jointLoad || {};
   const canDelete = !isNew && existing && (existing.isCustom || existing.isOverride);
 
   const primaryKeys = Object.keys(muscles).filter((k) => muscles[k] === 1);
@@ -100,6 +103,15 @@ export function renderExerciseForm(container, name, onDone) {
       <select id="libFormMovement">${MOVEMENTS.map((m) => `<option value="${m.key}" ${m.key === movement ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>
     </div>
     <div class="edit-field"><label>Athleticism (0 = none, 1–2 = explosive/power)</label><input type="number" id="libFormAthleticism" min="0" max="3" step="0.1" value="${athleticism || ""}" placeholder="0" /></div>
+    <div class="edit-field">
+      <label>Joint load (0 = none, up to ~1 = heavy)</label>
+      <div class="joint-load-grid">
+        ${JOINTS.map(
+          (j) =>
+            `<label>${esc(j.label)}<input type="number" id="libFormJoint-${j.key}" min="0" max="2" step="0.1" value="${jointLoad[j.key] || ""}" placeholder="0" /></label>`
+        ).join("")}
+      </div>
+    </div>
     <div class="edit-field"><label>Primary muscles (full credit)</label><div class="muscle-grid" id="libFormPrimary">${muscleGridHtml("primary", primaryKeys)}</div></div>
     <div class="edit-field"><label>Secondary muscles (half credit)</label><div class="muscle-grid" id="libFormSecondary">${muscleGridHtml("secondary", secondaryKeys)}</div></div>
     <div class="workout-detail-actions">
@@ -126,6 +138,11 @@ export function renderExerciseForm(container, name, onDone) {
     }
     const newMovement = container.querySelector("#libFormMovement").value;
     const newAthleticism = parseFloat(container.querySelector("#libFormAthleticism").value) || 0;
+    const newJointLoad = {};
+    JOINTS.forEach((j) => {
+      const v = parseFloat(container.querySelector(`#libFormJoint-${j.key}`).value);
+      if (v) newJointLoad[j.key] = v;
+    });
     const newMuscles = {};
     container.querySelectorAll('input[data-muscle][data-group="primary"]').forEach((cb) => {
       if (cb.checked) newMuscles[cb.dataset.muscle] = 1;
@@ -138,7 +155,7 @@ export function renderExerciseForm(container, name, onDone) {
     btn.disabled = true;
     btn.textContent = "Saving…";
     try {
-      await saveOverride({ name: newName, movement: newMovement, muscles: newMuscles, athleticism: newAthleticism }, name);
+      await saveOverride({ name: newName, movement: newMovement, muscles: newMuscles, athleticism: newAthleticism, jointLoad: newJointLoad }, name);
       await loadExerciseOverrides();
       if (onDone) onDone();
     } catch (e) {

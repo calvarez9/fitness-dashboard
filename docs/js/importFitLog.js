@@ -25,6 +25,7 @@ export async function importFitLogBackup(data, onProgress) {
         movement: e.movement || "isolation",
         muscles: e.muscles || {},
         athleticism: e.athleticism || 0,
+        joint_load: e.jointLoad || {},
       }));
     if (rows.length) {
       const { error } = await supabase.from("exercise_overrides").upsert(rows, { onConflict: "name" });
