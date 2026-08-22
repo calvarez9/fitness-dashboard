@@ -17,6 +17,9 @@ import {
   renderPRBoard,
   loadTrainingEmphasis,
   renderTrainingEmphasis,
+  renderStrengthEmphasisDetail,
+  renderExplosiveDetail,
+  renderCardioIntensityDetail,
   loadJointLoad,
   renderJointLoad,
   renderJointDetail,
@@ -66,6 +69,12 @@ function renderModalTop() {
   else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "muscle") renderMuscleDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "joint") renderJointDetail(body, top.payload, (name) => pushModal("exercise", name));
+  else if (top.type === "emphasis") {
+    const onOpenExercise = (name) => pushModal("exercise", name);
+    if (top.payload === "strength") renderStrengthEmphasisDetail(body, onOpenExercise);
+    else if (top.payload === "explosive") renderExplosiveDetail(body, onOpenExercise);
+    else if (top.payload === "cardio") renderCardioIntensityDetail(body);
+  }
 }
 
 function pushModal(type, payload) {
@@ -93,7 +102,7 @@ async function refreshWorkouts(days) {
   await loadWorkouts(start, end);
 
   const emphasis = await loadTrainingEmphasis(start, end);
-  renderTrainingEmphasis($("#trainingEmphasis"), emphasis);
+  renderTrainingEmphasis($("#trainingEmphasis"), emphasis, (kind) => pushModal("emphasis", kind));
 
   const jointLoad = await loadJointLoad(start, end);
   renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
