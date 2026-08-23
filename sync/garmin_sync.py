@@ -212,11 +212,12 @@ def sync_activities(garmin, limit=20):
         if any(x in name.lower() for x in EXCLUDED_ACTIVITY_NAMES):
             continue
         activity_type = (a.get("activityType") or {}).get("typeKey")
-        # Skip the extra API call for strength sessions -- they're excluded
-        # from every cardio stat downstream anyway, so their zone data is
-        # never read.
+        # Fetched for every activity type, strength included -- the
+        # dashboard now shows a separate "Other Training" intensity chart
+        # (strength_training etc.) alongside the cardio one, so this data
+        # is read for both, not just cardio.
         zones = {f"hr_zone_{n}_seconds": a.get(f"hrTimeInZone_{n}") for n in range(1, 6)}
-        if activity_type != "strength_training" and a.get("activityId"):
+        if a.get("activityId"):
             fetched = fetch_hr_zones(garmin, a["activityId"])
             # Prefer the real per-activity fetch; fall back to whatever (if
             # anything) was inline on the list response.

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821z9" />
+<link rel="stylesheet" href="css/styles.css?v=20260821za" />
 </head>
 <body>
 <div id="app">
@@ -192,9 +192,16 @@
         </section>
 
         <section class="chart-section">
-          <h2>Cardio Intensity</h2>
-          <div class="chart-card">
-            <div id="cardioZones" class="sleep-stages"></div>
+          <h2>Intensity by Type</h2>
+          <div class="intensity-row">
+            <div class="chart-card intensity-col">
+              <h3 class="intensity-col-title">Cardio</h3>
+              <div id="cardioZones" class="sleep-stages"></div>
+            </div>
+            <div class="chart-card intensity-col">
+              <h3 class="intensity-col-title">Other Training</h3>
+              <div id="otherTrainingZones" class="sleep-stages"></div>
+            </div>
           </div>
         </section>
 
@@ -287,6 +294,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821z9"></script>
+<script type="module" src="js/app.js?v=20260821za"></script>
 </body>
 </html>

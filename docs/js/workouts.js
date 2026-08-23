@@ -1290,7 +1290,7 @@ export function renderCardioIntensityDetail(container) {
 // sync/garmin_sync.py started fetching it properly, or a rare fetch
 // failure), the whole activity's duration is credited to a single zone
 // classified from its avg_hr instead -- see activityIntensityMinutes.
-export async function loadCardioZones(start, end) {
+async function loadZonesWhere(start, end, includeActivity) {
   const [estimatedMaxHR, activitiesRes] = await Promise.all([
     getEstimatedMaxHR(),
     supabase
@@ -1303,7 +1303,7 @@ export async function loadCardioZones(start, end) {
   const zones = [1, 2, 3, 4, 5].map((n) => ({ n, seconds: 0 }));
   if (!error) {
     (data || [])
-      .filter((a) => !NON_CARDIO_ACTIVITY_TYPES.has(a.activity_type))
+      .filter(includeActivity)
       .forEach((a) => {
         if (a.hr_zone_3_seconds != null) {
           zones.forEach((z) => {
@@ -1318,13 +1318,25 @@ export async function loadCardioZones(start, end) {
   return zones;
 }
 
+export async function loadCardioZones(start, end) {
+  return loadZonesWhere(start, end, (a) => !NON_CARDIO_ACTIVITY_TYPES.has(a.activity_type));
+}
+
+// Everything Cardio Intensity excludes -- currently just strength_training
+// (Pauwi Walk never reaches this table at all, filtered at sync time), but
+// written as "not cardio" rather than hardcoding the one type so it stays
+// correct if another non-cardio activity type shows up later.
+export async function loadOtherTrainingZones(start, end) {
+  return loadZonesWhere(start, end, (a) => NON_CARDIO_ACTIVITY_TYPES.has(a.activity_type));
+}
+
 const ZONE_LABEL = { 1: "Zone 1 · Easy", 2: "Zone 2 · Base", 3: "Zone 3 · Tempo", 4: "Zone 4 · Threshold", 5: "Zone 5 · Max" };
 const ZONE_CLASS = { 1: "hr-zone-1", 2: "hr-zone-2", 3: "hr-zone-3", 4: "hr-zone-4", 5: "hr-zone-5" };
 
-export function renderCardioZones(container, zones) {
+export function renderCardioZones(container, zones, emptyMessage = "No activity in range yet.") {
   const total = zones.reduce((sum, z) => sum + z.seconds, 0);
   if (!total) {
-    container.innerHTML = `<p class="chart-empty">No cardio activity in range yet.</p>`;
+    container.innerHTML = `<p class="chart-empty">${esc(emptyMessage)}</p>`;
     return;
   }
   const bar = zones

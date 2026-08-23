@@ -23,6 +23,7 @@ import {
   renderJointLoad,
   renderJointDetail,
   loadCardioZones,
+  loadOtherTrainingZones,
   renderCardioZones,
 } from "./workouts.js";
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
@@ -107,7 +108,10 @@ async function refreshWorkouts(days) {
   renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
 
   const cardioZones = await loadCardioZones(start, end);
-  renderCardioZones($("#cardioZones"), cardioZones);
+  renderCardioZones($("#cardioZones"), cardioZones, "No cardio activity in range yet.");
+
+  const otherTrainingZones = await loadOtherTrainingZones(start, end);
+  renderCardioZones($("#otherTrainingZones"), otherTrainingZones, "No other training activity in range yet.");
 
   renderWorkoutsList(
     $("#workoutsList"),

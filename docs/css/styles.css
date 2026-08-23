@@ -297,6 +297,17 @@ main#content { padding: 16px 16px 60px; }
 .bm-region.bm-zero { fill: var(--surface-3); }
 .bm-region.bm-active { fill: var(--series-2); fill-opacity: var(--bm-opacity, 0.3); }
 
+/* ---------- Intensity by type: cardio vs. other training, side by side ---------- */
+.intensity-row { display: flex; gap: 10px; }
+.intensity-col { flex: 1; min-width: 0; }
+.intensity-col-title {
+  font-size: 12px; font-weight: 700; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 8px;
+}
+@media (max-width: 480px) {
+  .intensity-row { flex-direction: column; }
+}
+
 /* ---------- Bar list (exercise / movement / muscle stats) ---------- */
 .bar-list { display: flex; flex-direction: column; gap: 12px; }
 .bar-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
