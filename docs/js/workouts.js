@@ -2,6 +2,7 @@
 import { supabase } from "./supabaseClient.js";
 import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js";
 import { renderBarList, renderProgressChart } from "./charts.js";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -341,6 +342,29 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
   if (!sets.length) {
     container.appendChild(emptyNote("No sets recorded."));
     return;
+  }
+
+  // Where this one session's work went -- same figure/coloring as the
+  // aggregate Muscle Volume view, just scoped to this workout's own sets
+  // instead of the whole selected range.
+  const muscleTotals = Object.fromEntries(MUSCLES.map((m) => [m.key, 0]));
+  sets.forEach((s) => {
+    if (s.is_warmup) return;
+    Object.entries(resolveExerciseMeta(s.exercise_name).muscles || {}).forEach(([muscle, frac]) => {
+      muscleTotals[muscle] = (muscleTotals[muscle] || 0) + frac;
+    });
+  });
+  if (Object.values(muscleTotals).some((v) => v > 0)) {
+    const bodyMapWrap = document.createElement("div");
+    bodyMapWrap.className = "bodymap-row workout-detail-bodymap";
+    bodyMapWrap.innerHTML = `
+      <figure class="bodymap-figure"><svg viewBox="0 0 724 1448"></svg><figcaption>Front</figcaption></figure>
+      <figure class="bodymap-figure"><svg viewBox="724 0 724 1448"></svg><figcaption>Back</figcaption></figure>
+    `;
+    container.appendChild(bodyMapWrap);
+    const [frontSvg, backSvg] = bodyMapWrap.querySelectorAll("svg");
+    renderBodyMaps(frontSvg, backSvg);
+    applyVolumeColors(frontSvg, backSvg, muscleTotals);
   }
 
   const order = [];
