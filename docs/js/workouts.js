@@ -44,7 +44,9 @@ export async function loadWorkouts(start, end) {
       // as "no links" rather than breaking the whole workouts list.
       supabase
         .from("workout_links")
-        .select("fitlog_workout_id, garmin_activities(id, activity_name, activity_type, duration_seconds, avg_hr, max_hr, calories)")
+        .select(
+          "fitlog_workout_id, garmin_activities(id, activity_name, activity_type, duration_seconds, avg_hr, max_hr, calories, hr_zone_1_seconds, hr_zone_2_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds)"
+        )
         .in("fitlog_workout_id", ids)
         .then(
           (r) => r,
@@ -317,6 +319,15 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
     garminNote.className = "muted small";
     garminNote.textContent = `⌚ Recorded on Garmin (${linkedActivity.activity_name || linkedActivity.activity_type}): ${bits.join(" · ")}`;
     container.appendChild(garminNote);
+
+    const zones = [1, 2, 3, 4, 5].map((n) => ({ n, seconds: linkedActivity[`hr_zone_${n}_seconds`] || 0 }));
+    if (zones.some((z) => z.seconds > 0)) {
+      const zoneWrap = document.createElement("div");
+      zoneWrap.className = "sleep-stages";
+      zoneWrap.style.marginTop = "6px";
+      container.appendChild(zoneWrap);
+      renderCardioZones(zoneWrap, zones);
+    }
   }
 
   if (workout.type === "cardio") {
