@@ -1,6 +1,6 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
-import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js";
+import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js";
 import { renderBarList, renderProgressChart } from "./charts.js";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
@@ -704,7 +704,7 @@ function buildMovementRows(movementTotals) {
     const total = g.members.reduce((sum, k) => sum + (movementTotals[k] || 0), 0);
     if (total > 0) topLevel.push({ type: "group", key: g.key, label: g.label, value: round(total), members: g.members });
   });
-  MOVEMENTS.forEach((m) => {
+  MOVEMENTS_IN_VOLUME.forEach((m) => {
     if (groupedKeys.has(m.key)) return;
     if (movementTotals[m.key] > 0) topLevel.push({ type: "single", key: m.key, label: MOVEMENT_LABEL[m.key], value: round(movementTotals[m.key]) });
   });
@@ -724,7 +724,7 @@ function buildMovementRows(movementTotals) {
 }
 
 export function computeMovementMuscleStats() {
-  const movementTotals = Object.fromEntries(MOVEMENTS.map((m) => [m.key, 0]));
+  const movementTotals = Object.fromEntries(MOVEMENTS_IN_VOLUME.map((m) => [m.key, 0]));
   const muscleTotals = Object.fromEntries(MUSCLES.map((m) => [m.key, 0]));
   const unmatched = new Set();
 
@@ -733,7 +733,11 @@ export function computeMovementMuscleStats() {
       if (s.is_warmup) return;
       const meta = resolveExerciseMeta(s.exercise_name);
       if (!meta.matched) unmatched.add(s.exercise_name);
-      movementTotals[meta.movement] = (movementTotals[meta.movement] || 0) + 1;
+      // Isolation is a valid tag but deliberately excluded from Movement
+      // Pattern Volume -- see MOVEMENTS_IN_VOLUME in exerciseLibrary.js.
+      if (meta.movement !== "isolation") {
+        movementTotals[meta.movement] = (movementTotals[meta.movement] || 0) + 1;
+      }
       Object.entries(meta.muscles || {}).forEach(([muscle, frac]) => {
         muscleTotals[muscle] = (muscleTotals[muscle] || 0) + frac;
       });

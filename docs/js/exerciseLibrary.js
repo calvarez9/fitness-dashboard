@@ -47,8 +47,16 @@ export const MOVEMENTS = [
   { key: "squat", label: "Squat" },
   { key: "hinge", label: "Hinge" },
   { key: "lunge", label: "Lunge" },
+  { key: "core", label: "Core" },
+  { key: "isolation", label: "Isolation" },
 ];
 export const MOVEMENT_LABEL = Object.fromEntries(MOVEMENTS.map((m) => [m.key, m.label]));
+// Isolation is a valid tag (so a bicep curl etc. has somewhere to go) but is
+// deliberately excluded from the Movement Pattern Volume breakdown -- it
+// covers too wide a range of single-joint work to read as one meaningful
+// "pattern" the way squat/hinge/push/pull/core do. Core is its own real
+// pattern (plank, dead bug, rotational work) and does show up there.
+export const MOVEMENTS_IN_VOLUME = MOVEMENTS.filter((m) => m.key !== "isolation");
 
 // The major joints worth tracking fatigue on -- deliberately just these
 // three, the ones that actually accumulate meaningful, trackable load
@@ -110,10 +118,10 @@ export const BUILTIN_EXERCISES = {
   "Walking Lunge": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5, hipFlexors: 0.5 }, athleticism: 0.3, jointLoad: { knees: 0.6, lowBack: 0.2 } },
   "Bulgarian Split Squat": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5 }, athleticism: 0.3, jointLoad: { knees: 0.7 } },
   "Calf Raise": { movement: "isolation", muscles: { calves: 1 }, jointLoad: { knees: 0.1 } },
-  "Plank": { movement: "isolation", muscles: { abs: 1, obliques: 0.5 }, jointLoad: { lowBack: 0.2 } },
-  "Hanging Leg Raise": { movement: "isolation", muscles: { abs: 1, hipFlexors: 1, obliques: 0.5 }, jointLoad: { shoulders: 0.3, lowBack: 0.1 } },
-  "Side Plank": { movement: "isolation", muscles: { obliques: 1, abs: 0.5 }, jointLoad: { lowBack: 0.1 } },
-  "Bird Dog": { movement: "isolation", muscles: { lowerBack: 1, abs: 0.5, glutes: 0.5 }, jointLoad: { lowBack: 0.2 } },
+  "Plank": { movement: "core", muscles: { abs: 1, obliques: 0.5 }, jointLoad: { lowBack: 0.2 } },
+  "Hanging Leg Raise": { movement: "core", muscles: { abs: 1, hipFlexors: 1, obliques: 0.5 }, jointLoad: { shoulders: 0.3, lowBack: 0.1 } },
+  "Side Plank": { movement: "core", muscles: { obliques: 1, abs: 0.5 }, jointLoad: { lowBack: 0.1 } },
+  "Bird Dog": { movement: "core", muscles: { lowerBack: 1, abs: 0.5, glutes: 0.5 }, jointLoad: { lowBack: 0.2 } },
   "Sumo Deadlift": { movement: "hinge", muscles: { adductors: 1, glutes: 1, hamstrings: 0.5, lowerBack: 0.5, quadriceps: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 0.8, knees: 0.3 } },
   "Hip Adduction Machine": { movement: "isolation", muscles: { adductors: 1 }, jointLoad: { knees: 0.1 } },
   "Hip Abduction Machine": { movement: "isolation", muscles: { abductors: 1 }, jointLoad: { knees: 0.1 } },
@@ -149,7 +157,7 @@ const ATHLETICISM_EXERCISES = {
   "Tuck Jump": { movement: "squat", muscles: { quadriceps: 1, calves: 0.5, abs: 0.5 }, athleticism: 1, jointLoad: { knees: 0.6 } },
   "Medicine Ball Slam": { movement: "isolation", muscles: { abs: 1, obliques: 0.5, lats: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.3, shoulders: 0.3 } },
   "Medicine Ball Chest Throw": { movement: "horizontalPush", muscles: { chest: 1, frontDelts: 0.5, triceps: 0.5 }, athleticism: 1, jointLoad: { shoulders: 0.4 } },
-  "Medicine Ball Rotational Throw": { movement: "isolation", muscles: { obliques: 1, abs: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.3 } },
+  "Medicine Ball Rotational Throw": { movement: "core", muscles: { obliques: 1, abs: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.3 } },
   "Clean": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, upperBack: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.5, knees: 0.4, shoulders: 0.3 } },
   "Snatch": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, frontDelts: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.6, knees: 0.4, shoulders: 0.5 } },
   "Clean and Jerk": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, frontDelts: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.6, knees: 0.5, shoulders: 0.5 } },
@@ -166,11 +174,11 @@ const ATHLETICISM_EXERCISES = {
 // away so their sets still count toward movement/muscle stats.
 const EXTRA_EXERCISES = {
   "1/2 Kneeling Adductor Rock Back": { movement: "isolation", muscles: { adductors: 1, abs: 0.5 } },
-  "Ab Wheel": { movement: "isolation", muscles: { abs: 1, hipFlexors: 0.5, obliques: 0.5 } },
+  "Ab Wheel": { movement: "core", muscles: { abs: 1, hipFlexors: 0.5, obliques: 0.5 } },
   "Back Extension": { movement: "hinge", muscles: { lowerBack: 1, glutes: 0.5, hamstrings: 0.5 }, jointLoad: { lowBack: 0.5 } },
   "Chest Supported Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 } },
   "Cossack Squat": { movement: "lunge", muscles: { quadriceps: 1, adductors: 1, glutes: 0.5 }, jointLoad: { knees: 0.5 } },
-  "Dead Bug": { movement: "isolation", muscles: { abs: 1, obliques: 0.5 } },
+  "Dead Bug": { movement: "core", muscles: { abs: 1, obliques: 0.5 } },
   "Goblet Squat": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, adductors: 0.5, abs: 0.5 }, jointLoad: { knees: 0.6 } },
   "Incline Bicep Curl": { movement: "isolation", muscles: { biceps: 1, forearms: 0.5 } },
   "Narrow Push Up": { movement: "horizontalPush", muscles: { triceps: 1, chest: 0.5, frontDelts: 0.5 } },
