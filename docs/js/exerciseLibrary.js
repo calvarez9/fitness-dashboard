@@ -22,7 +22,10 @@ export const MUSCLES = [
   { key: "lats", label: "Lats" },
   { key: "upperBack", label: "Upper Back" },
   { key: "lowerBack", label: "Lower Back" },
-  { key: "traps", label: "Traps" },
+  { key: "spinalErectors", label: "Spinal Erectors" },
+  { key: "upperTraps", label: "Upper Traps" },
+  { key: "middleTraps", label: "Middle Traps" },
+  { key: "lowerTraps", label: "Lower Traps" },
   { key: "glutes", label: "Glutes" },
   { key: "hipFlexors", label: "Hip Flexors" },
   { key: "adductors", label: "Adductors" },
@@ -32,6 +35,14 @@ export const MUSCLES = [
   { key: "calves", label: "Calves" },
 ];
 export const MUSCLE_LABEL = Object.fromEntries(MUSCLES.map((m) => [m.key, m.label]));
+
+// Sub-muscles that roll up into one parent row in the main Muscle Volume
+// list (summed, like every other muscle) -- the individual upper/middle/
+// lower split is only surfaced on demand (the click-through detail), not
+// shown by default, since seeing 3 rows for "traps" everywhere it'd
+// normally be 1 is more clutter than signal for a muscle most people
+// think of as one unit day to day.
+export const MUSCLE_GROUPS = [{ key: "traps", label: "Traps", members: ["upperTraps", "middleTraps", "lowerTraps"] }];
 
 // "isolation" is intentionally NOT one of these -- isolation-movement
 // exercises (curls, leg extensions, etc.) still carry a `movement:
@@ -90,9 +101,9 @@ export const MOVEMENT_GROUPS = [
 // exercise taxes that joint specifically, independent of which muscle it
 // trains. Mirrors FitLog's own tagging so the two stay in sync.
 export const BUILTIN_EXERCISES = {
-  "Barbell Squat": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, abs: 0.5, lowerBack: 0.5, adductors: 0.5 }, athleticism: 0.5, jointLoad: { knees: 0.8, lowBack: 0.5 } },
+  "Barbell Squat": { movement: "squat", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, abs: 0.5, spinalErectors: 0.5, adductors: 0.5 }, athleticism: 0.5, jointLoad: { knees: 0.8, lowBack: 0.5 } },
   "Bench Press": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 }, athleticism: 0.2, jointLoad: { shoulders: 0.4 } },
-  "Deadlift": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, lowerBack: 1, upperBack: 0.5, traps: 0.5, forearms: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 1, knees: 0.2 } },
+  "Deadlift": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, spinalErectors: 1, upperBack: 0.5, upperTraps: 0.5, forearms: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 1, knees: 0.2 } },
   "Overhead Press": { movement: "verticalPush", muscles: { frontDelts: 1, middleDelts: 0.5, triceps: 0.5 }, athleticism: 0.3, jointLoad: { shoulders: 0.9 } },
   "Barbell Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 }, athleticism: 0.2, jointLoad: { lowBack: 0.4, shoulders: 0.2 } },
   "Pull-Up": { movement: "verticalPull", muscles: { lats: 1, upperBack: 0.5, biceps: 0.5 }, athleticism: 0.3, jointLoad: { shoulders: 0.3 } },
@@ -113,7 +124,7 @@ export const BUILTIN_EXERCISES = {
   "Leg Press": { movement: "squat", muscles: { quadriceps: 1, glutes: 0.5, hamstrings: 0.5, adductors: 0.5 }, athleticism: 0.2, jointLoad: { knees: 0.7 } },
   "Leg Curl": { movement: "isolation", muscles: { hamstrings: 1 }, jointLoad: { knees: 0.2 } },
   "Leg Extension": { movement: "isolation", muscles: { quadriceps: 1 }, jointLoad: { knees: 0.6 } },
-  "Romanian Deadlift": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, lowerBack: 0.5 }, athleticism: 0.3, jointLoad: { lowBack: 0.7, knees: 0.1 } },
+  "Romanian Deadlift": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, spinalErectors: 0.5 }, athleticism: 0.3, jointLoad: { lowBack: 0.7, knees: 0.1 } },
   "Hip Thrust": { movement: "hinge", muscles: { glutes: 1, hamstrings: 0.5, abductors: 0.5 }, athleticism: 0.3, jointLoad: { lowBack: 0.2 } },
   "Walking Lunge": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5, hipFlexors: 0.5 }, athleticism: 0.3, jointLoad: { knees: 0.6, lowBack: 0.2 } },
   "Bulgarian Split Squat": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5 }, athleticism: 0.3, jointLoad: { knees: 0.7 } },
@@ -122,7 +133,7 @@ export const BUILTIN_EXERCISES = {
   "Hanging Leg Raise": { movement: "core", muscles: { abs: 1, hipFlexors: 1, obliques: 0.5 }, jointLoad: { shoulders: 0.3, lowBack: 0.1 } },
   "Side Plank": { movement: "core", muscles: { obliques: 1, abs: 0.5 }, jointLoad: { lowBack: 0.1 } },
   "Bird Dog": { movement: "core", muscles: { lowerBack: 1, abs: 0.5, glutes: 0.5 }, jointLoad: { lowBack: 0.2 } },
-  "Sumo Deadlift": { movement: "hinge", muscles: { adductors: 1, glutes: 1, hamstrings: 0.5, lowerBack: 0.5, quadriceps: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 0.8, knees: 0.3 } },
+  "Sumo Deadlift": { movement: "hinge", muscles: { adductors: 1, glutes: 1, hamstrings: 0.5, spinalErectors: 0.5, quadriceps: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 0.8, knees: 0.3 } },
   "Hip Adduction Machine": { movement: "isolation", muscles: { adductors: 1 }, jointLoad: { knees: 0.1 } },
   "Hip Abduction Machine": { movement: "isolation", muscles: { abductors: 1 }, jointLoad: { knees: 0.1 } },
   "Standing Cable Hip Flexion": { movement: "isolation", muscles: { hipFlexors: 1 } },
@@ -130,9 +141,9 @@ export const BUILTIN_EXERCISES = {
   "Face Pull": { movement: "horizontalPull", muscles: { rearDelts: 1, upperBack: 0.5 }, jointLoad: { shoulders: 0.2 } },
   "Lateral Raise": { movement: "isolation", muscles: { middleDelts: 1 }, jointLoad: { shoulders: 0.4 } },
   "Front Raise": { movement: "isolation", muscles: { frontDelts: 1 }, jointLoad: { shoulders: 0.4 } },
-  "Shrug": { movement: "isolation", muscles: { traps: 1 } },
-  "Good Morning": { movement: "hinge", muscles: { hamstrings: 1, lowerBack: 1, glutes: 0.5 }, athleticism: 0.3, jointLoad: { lowBack: 0.9 } },
-  "Farmer's Carry": { movement: "isolation", muscles: { forearms: 1, traps: 0.5, abs: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 0.3, shoulders: 0.2 } },
+  "Shrug": { movement: "isolation", muscles: { upperTraps: 1 } },
+  "Good Morning": { movement: "hinge", muscles: { hamstrings: 1, spinalErectors: 1, glutes: 0.5 }, athleticism: 0.3, jointLoad: { lowBack: 0.9 } },
+  "Farmer's Carry": { movement: "isolation", muscles: { forearms: 1, upperTraps: 0.5, abs: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 0.3, shoulders: 0.2 } },
 };
 
 // Explosive/power movements -- jumps, throws, Olympic lifts, and similar --
@@ -158,12 +169,12 @@ const ATHLETICISM_EXERCISES = {
   "Medicine Ball Slam": { movement: "isolation", muscles: { abs: 1, obliques: 0.5, lats: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.3, shoulders: 0.3 } },
   "Medicine Ball Chest Throw": { movement: "horizontalPush", muscles: { chest: 1, frontDelts: 0.5, triceps: 0.5 }, athleticism: 1, jointLoad: { shoulders: 0.4 } },
   "Medicine Ball Rotational Throw": { movement: "core", muscles: { obliques: 1, abs: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.3 } },
-  "Clean": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, upperBack: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.5, knees: 0.4, shoulders: 0.3 } },
-  "Snatch": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, frontDelts: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.6, knees: 0.4, shoulders: 0.5 } },
-  "Clean and Jerk": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, traps: 1, frontDelts: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.6, knees: 0.5, shoulders: 0.5 } },
+  "Clean": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, upperTraps: 1, upperBack: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.5, knees: 0.4, shoulders: 0.3 } },
+  "Snatch": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, upperTraps: 1, frontDelts: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.6, knees: 0.4, shoulders: 0.5 } },
+  "Clean and Jerk": { movement: "hinge", muscles: { hamstrings: 1, glutes: 1, upperTraps: 1, frontDelts: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.6, knees: 0.5, shoulders: 0.5 } },
   "Jerk": { movement: "verticalPush", muscles: { frontDelts: 1, triceps: 0.5, quadriceps: 0.5 }, athleticism: 1, jointLoad: { shoulders: 0.6, knees: 0.3 } },
   "Push Press": { movement: "verticalPush", muscles: { frontDelts: 1, triceps: 0.5, quadriceps: 0.3 }, athleticism: 1, jointLoad: { shoulders: 0.7, knees: 0.2, lowBack: 0.2 } },
-  "Kettlebell Swing": { movement: "hinge", muscles: { glutes: 1, hamstrings: 1, lowerBack: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.6 } },
+  "Kettlebell Swing": { movement: "hinge", muscles: { glutes: 1, hamstrings: 1, spinalErectors: 0.5 }, athleticism: 1, jointLoad: { lowBack: 0.6 } },
   "Sprint": { movement: "isolation", muscles: { quadriceps: 0.5, hamstrings: 1, glutes: 0.5, calves: 0.5 }, athleticism: 1, jointLoad: { knees: 0.4, lowBack: 0.2 } },
   "Burpee": { movement: "isolation", muscles: { chest: 0.5, quadriceps: 0.5, abs: 0.5 }, athleticism: 1, jointLoad: { knees: 0.3, shoulders: 0.2, lowBack: 0.2 } },
   "Battle Ropes": { movement: "isolation", muscles: { frontDelts: 0.5, abs: 0.5, forearms: 0.5 }, athleticism: 1, jointLoad: { shoulders: 0.5 } },
@@ -175,7 +186,7 @@ const ATHLETICISM_EXERCISES = {
 const EXTRA_EXERCISES = {
   "1/2 Kneeling Adductor Rock Back": { movement: "isolation", muscles: { adductors: 1, abs: 0.5 } },
   "Ab Wheel": { movement: "core", muscles: { abs: 1, hipFlexors: 0.5, obliques: 0.5 } },
-  "Back Extension": { movement: "hinge", muscles: { lowerBack: 1, glutes: 0.5, hamstrings: 0.5 }, jointLoad: { lowBack: 0.5 } },
+  "Back Extension": { movement: "hinge", muscles: { spinalErectors: 1, glutes: 0.5, hamstrings: 0.5 }, jointLoad: { lowBack: 0.5 } },
   "Chest Supported Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 } },
   "Cossack Squat": { movement: "lunge", muscles: { quadriceps: 1, adductors: 1, glutes: 0.5 }, jointLoad: { knees: 0.5 } },
   "Dead Bug": { movement: "core", muscles: { abs: 1, obliques: 0.5 } },
@@ -238,13 +249,20 @@ const ALIASES = {
 // (checked first, below); a new name adds a custom exercise -- the same
 // "override vs custom" model FitLog already uses locally, just synced
 // through Supabase here instead of localStorage.
-let OVERRIDES = new Map(); // normKey(name) -> { name, movement, muscles, athleticism, jointLoad }
+let OVERRIDES = new Map(); // normKey(name) -> { name, movement, muscles, athleticism, jointLoad, createdAt }
 
 export function setExerciseOverrides(rows) {
   OVERRIDES = new Map(
     (rows || []).map((r) => [
       normKey(r.name),
-      { name: r.name, movement: r.movement, muscles: r.muscles || {}, athleticism: r.athleticism || 0, jointLoad: r.joint_load || {} },
+      {
+        name: r.name,
+        movement: r.movement,
+        muscles: r.muscles || {},
+        athleticism: r.athleticism || 0,
+        jointLoad: r.joint_load || {},
+        createdAt: r.created_at ? new Date(r.created_at).getTime() : 0,
+      },
     ])
   );
 }
@@ -266,6 +284,7 @@ export function getAllExerciseEntries() {
       jointLoad: meta.jointLoad || {},
       isCustom: false,
       isOverride: false,
+      createdAt: 0,
     });
   });
   OVERRIDES.forEach((meta, key) => {

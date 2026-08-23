@@ -1,6 +1,6 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
-import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js";
+import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js";
 import { renderBarList, renderProgressChart } from "./charts.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
 
@@ -782,6 +782,23 @@ function buildMovementRows(movementTotals) {
   return rows;
 }
 
+// Sub-muscles in a MUSCLE_GROUPS entry (e.g. upper/middle/lower traps) roll
+// up into one parent row here -- the split itself is only shown in the
+// click-through detail (renderMuscleDetail), not the main list.
+function buildMuscleRows(muscleTotals) {
+  const groupedKeys = new Set(MUSCLE_GROUPS.flatMap((g) => g.members));
+  const rows = [];
+  MUSCLE_GROUPS.forEach((g) => {
+    const total = g.members.reduce((sum, k) => sum + (muscleTotals[k] || 0), 0);
+    if (total > 0) rows.push({ key: g.key, label: g.label, value: round(total) });
+  });
+  MUSCLES.forEach((m) => {
+    if (groupedKeys.has(m.key)) return;
+    if (muscleTotals[m.key] > 0) rows.push({ key: m.key, label: m.label, value: round(muscleTotals[m.key]) });
+  });
+  return rows.sort((a, b) => b.value - a.value);
+}
+
 export function computeMovementMuscleStats() {
   const movementTotals = Object.fromEntries(MOVEMENTS_IN_VOLUME.map((m) => [m.key, 0]));
   const muscleTotals = Object.fromEntries(MUSCLES.map((m) => [m.key, 0]));
@@ -805,9 +822,7 @@ export function computeMovementMuscleStats() {
 
   const movementRows = buildMovementRows(movementTotals);
 
-  const muscleRows = MUSCLES.map((m) => ({ key: m.key, label: m.label, value: round(muscleTotals[m.key]) }))
-    .filter((r) => r.value > 0)
-    .sort((a, b) => b.value - a.value);
+  const muscleRows = buildMuscleRows(muscleTotals);
 
   return { movementRows, muscleRows, muscleTotals, unmatched: [...unmatched] };
 }
@@ -959,18 +974,51 @@ export function renderMovementDetail(container, movementKeyOrGroup, onOpenExerci
   renderBarList(list, rows, { onClick: (r) => onOpenExercise(r.label) });
 }
 
+// muscleKey may be a real muscle (e.g. "biceps") or a MUSCLE_GROUPS parent
+// key (e.g. "traps") -- for a group, this is the "on demand" reveal the
+// main list deliberately doesn't show by default: a small upper/middle/
+// lower breakdown first, then the usual exercise-contribution list below
+// it (credited against whichever sub-muscle each exercise actually hits).
 export function renderMuscleDetail(container, muscleKey, onOpenExercise) {
   container.innerHTML = "";
+  const group = MUSCLE_GROUPS.find((g) => g.key === muscleKey);
+  const memberKeys = group ? group.members : [muscleKey];
+
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>${esc(MUSCLE_LABEL[muscleKey] || muscleKey)}</h4>`;
+  header.innerHTML = `<h4>${esc(group ? group.label : MUSCLE_LABEL[muscleKey] || muscleKey)}</h4>`;
   container.appendChild(header);
+
+  if (group) {
+    const subTotals = Object.fromEntries(memberKeys.map((k) => [k, 0]));
+    for (const sets of cache.setsByWorkout.values()) {
+      sets.forEach((s) => {
+        if (s.is_warmup) return;
+        const meta = resolveExerciseMeta(s.exercise_name);
+        memberKeys.forEach((k) => {
+          const frac = (meta.muscles || {})[k];
+          if (frac) subTotals[k] += frac;
+        });
+      });
+    }
+    const subRows = memberKeys
+      .map((k) => ({ label: MUSCLE_LABEL[k] || k, value: round(subTotals[k]) }))
+      .filter((r) => r.value > 0)
+      .sort((a, b) => b.value - a.value);
+    if (subRows.length) {
+      const subList = document.createElement("div");
+      subList.className = "bar-list";
+      container.appendChild(subList);
+      renderBarList(subList, subRows);
+    }
+  }
 
   const totals = new Map(); // exercise_name -> fraction-weighted credited sets
   for (const sets of cache.setsByWorkout.values()) {
     sets.forEach((s) => {
       if (s.is_warmup) return;
-      const frac = resolveExerciseMeta(s.exercise_name).muscles?.[muscleKey];
+      const meta = resolveExerciseMeta(s.exercise_name);
+      const frac = Math.max(0, ...memberKeys.map((k) => (meta.muscles || {})[k] || 0));
       if (!frac) return;
       totals.set(s.exercise_name, (totals.get(s.exercise_name) || 0) + frac);
     });

@@ -49,6 +49,13 @@ function currentRangeDays() {
 // ---------- Muscle/movement filters (Workouts list + Library list) ----------
 const workoutFilter = { muscle: "", movement: "" };
 const libraryFilter = { muscle: "", movement: "" };
+let librarySort = "name";
+
+// Re-renders just the Library list against whatever's already loaded --
+// used by the filter/sort dropdowns, which shouldn't need a data reload.
+function refreshLibraryList() {
+  renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter, librarySort);
+}
 
 function initFilters() {
   const muscleOptions = MUSCLES.map((m) => `<option value="${m.key}">${escHtml(m.label)}</option>`).join("");
@@ -69,11 +76,15 @@ function initFilters() {
   });
   $("#libraryMuscleFilter").addEventListener("change", (e) => {
     libraryFilter.muscle = e.target.value;
-    renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter);
+    refreshLibraryList();
   });
   $("#libraryMovementFilter").addEventListener("change", (e) => {
     libraryFilter.movement = e.target.value;
-    renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter);
+    refreshLibraryList();
+  });
+  $("#librarySort").addEventListener("change", (e) => {
+    librarySort = e.target.value;
+    refreshLibraryList();
   });
 }
 
@@ -247,7 +258,7 @@ function openExerciseEditor(name) {
 
 async function onLibraryChanged() {
   showLibraryList();
-  renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter);
+  refreshLibraryList();
   toast("Saved ✓");
   // Editing an exercise's movement/muscles/athleticism can change every
   // downstream stat that reads it -- refresh those too, not just the list.
@@ -260,7 +271,7 @@ async function refresh() {
     // Overrides must be loaded before anything computes movement/muscle/
     // athleticism stats, since resolveExerciseMeta() checks them first.
     await loadExerciseOverrides();
-    renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter);
+    refreshLibraryList();
     await loadDashboard(currentRangeDays());
     await refreshWorkouts(currentRangeDays());
     await refreshPRBoard();

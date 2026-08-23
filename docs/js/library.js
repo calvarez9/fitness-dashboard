@@ -11,7 +11,7 @@ function esc(s) {
 }
 
 export async function loadExerciseOverrides() {
-  const { data, error } = await supabase.from("exercise_overrides").select("name, movement, muscles, athleticism, joint_load");
+  const { data, error } = await supabase.from("exercise_overrides").select("name, movement, muscles, athleticism, joint_load, created_at");
   if (error) throw error;
   setExerciseOverrides(data || []);
 }
@@ -34,7 +34,11 @@ async function deleteOverride(name) {
 
 // filter: { muscle?: muscleKey, movement?: movementKey } -- both optional,
 // AND'd together when both are set. Muscle matches primary or secondary.
-export function renderLibraryList(container, onOpen, filter = {}) {
+// sort: "name" (default) or "recent" -- createdAt is 0 for every builtin
+// (never "recent"), and for a custom/override, set once at creation and
+// left alone on later edits (see saveOverride's upsert -- created_at is
+// never included in the payload, so editing never touches it).
+export function renderLibraryList(container, onOpen, filter = {}, sort = "name") {
   container.innerHTML = "";
   const hasFilter = !!(filter.muscle || filter.movement);
   const all = getAllExerciseEntries().filter((ex) => {
@@ -42,6 +46,7 @@ export function renderLibraryList(container, onOpen, filter = {}) {
     if (filter.movement && ex.movement !== filter.movement) return false;
     return true;
   });
+  if (sort === "recent") all.sort((a, b) => b.createdAt - a.createdAt);
   if (!all.length) {
     const p = document.createElement("p");
     p.className = "chart-empty";

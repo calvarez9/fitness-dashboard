@@ -17,7 +17,7 @@ const FRONT_SLUG_TO_MUSCLES = {
   obliques: ["obliques"],
   biceps: ["biceps"],
   triceps: ["triceps"],
-  trapezius: ["traps"],
+  trapezius: ["upperTraps", "middleTraps", "lowerTraps"],
   deltoids: ["frontDelts", "middleDelts"],
   adductors: ["adductors"],
   quadriceps: ["quadriceps"],
@@ -26,11 +26,11 @@ const FRONT_SLUG_TO_MUSCLES = {
 };
 
 const BACK_SLUG_TO_MUSCLES = {
-  trapezius: ["traps"],
+  trapezius: ["upperTraps", "middleTraps", "lowerTraps"],
   deltoids: ["rearDelts", "middleDelts"],
   "upper-back": ["upperBack", "lats"],
   triceps: ["triceps"],
-  "lower-back": ["lowerBack"],
+  "lower-back": ["lowerBack", "spinalErectors"],
   forearm: ["forearms"],
   gluteal: ["glutes", "abductors"],
   adductors: ["adductors"],
