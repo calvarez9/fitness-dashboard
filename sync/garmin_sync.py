@@ -172,36 +172,70 @@ EXCLUDED_ACTIVITY_NAMES = ["pauwi"]
 
 
 def fetch_hr_zones(garmin, activity_id):
-    """Real per-activity HR-zone-time breakdown, via garminconnect's
-    dedicated get_activity_hr_in_timezones() endpoint -- NOT the same as
-    the hrTimeInZone_1..5 fields sometimes present inline on the basic
-    activity list, which turned out to be populated on roughly 1 in 10
-    real activities (Garmin just doesn't inline this for most activity
-    types). This hits Garmin's actual per-activity hrTimeInZones endpoint,
-    which has it far more reliably.
+    """Real per-activity HR-zone-time breakdown. Two layers, since neither
+    is reliable alone:
 
-    Expected shape (best guess, like everything else in this file): a list
-    of {"zoneNumber": 1-5, "secsInZone": seconds}. Parsed defensively --
-    returns all-None if the shape doesn't match or the call fails, so one
-    bad activity can't break the whole sync; the raw response isn't kept
-    here (only the flattened attempt), unlike the daily-stats/activity
-    fields above, since this is already a secondary per-item call.
+    1. garminconnect's dedicated get_activity_hr_in_timezones() endpoint --
+       NOT the same as the hrTimeInZone_1..5 fields sometimes present
+       inline on the basic activity *list*, which turned out to be
+       populated on roughly 1 in 10 real activities there. This hits
+       Garmin's actual per-activity hrTimeInZones endpoint. In practice
+       this still comes back empty for some activities (a real, observed
+       pattern across a mixed batch of activity types -- not every
+       activity type appears to have zones computed here, or the call
+       fails/rate-limits for some fraction of a batch).
+    2. Falls back to get_activity(activity_id) -- the full single-activity
+       *summary* endpoint (different from, and more complete than, the
+       bulk activity list) -- and reads hrTimeInZone_1..5 off of that. This
+       is the "another name for the same data" fallback: same field names
+       as the list's inline attempt, but from an endpoint that actually
+       populates them more often since it returns the complete object for
+       one activity instead of a trimmed batch response.
+
+    Expected shape for step 1 (best guess, like everything else in this
+    file): a list of {"zoneNumber": 1-5, "secsInZone": seconds}. Both
+    steps are parsed defensively -- one bad activity can't break the whole
+    sync, and whatever's still missing after both layers stays null (the
+    dashboard's own avg_hr-based classification is the final fallback for
+    that, not this script's job).
     """
     empty = {f"hr_zone_{n}_seconds": None for n in range(1, 6)}
+
+    def parse_zone_list(zones):
+        if not isinstance(zones, list):
+            return None
+        result = dict(empty)
+        found = False
+        for z in zones:
+            n = z.get("zoneNumber") or z.get("zone_number")
+            secs = z.get("secsInZone") or z.get("secs_in_zone")
+            if n in (1, 2, 3, 4, 5) and secs is not None:
+                result[f"hr_zone_{n}_seconds"] = secs
+                found = True
+        return result if found else None
+
     try:
-        zones = garmin.get_activity_hr_in_timezones(activity_id)
+        parsed = parse_zone_list(garmin.get_activity_hr_in_timezones(activity_id))
+        if parsed:
+            return parsed
     except Exception as e:
-        print(f"  ! hr zones failed for activity {activity_id}: {e}", file=sys.stderr)
-        return empty
-    if not isinstance(zones, list):
-        return empty
-    result = dict(empty)
-    for z in zones:
-        n = z.get("zoneNumber") or z.get("zone_number")
-        secs = z.get("secsInZone") or z.get("secs_in_zone")
-        if n in (1, 2, 3, 4, 5) and secs is not None:
-            result[f"hr_zone_{n}_seconds"] = secs
-    return result
+        print(f"  ! hr zones (dedicated endpoint) failed for activity {activity_id}: {e}", file=sys.stderr)
+
+    try:
+        summary = garmin.get_activity(activity_id) or {}
+        result = dict(empty)
+        found = False
+        for n in range(1, 6):
+            val = summary.get(f"hrTimeInZone_{n}")
+            if val is not None:
+                result[f"hr_zone_{n}_seconds"] = val
+                found = True
+        if found:
+            return result
+    except Exception as e:
+        print(f"  ! hr zones (activity summary fallback) failed for activity {activity_id}: {e}", file=sys.stderr)
+
+    return empty
 
 
 def sync_activities(garmin, limit=20):
