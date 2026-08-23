@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821za" />
+<link rel="stylesheet" href="css/styles.css?v=20260821zb" />
 </head>
 <body>
 <div id="app">
@@ -166,6 +166,10 @@
         <section class="chart-section">
           <h2>Workouts</h2>
           <div class="chart-card">
+            <div class="filter-row">
+              <select id="workoutMuscleFilter"><option value="">All muscles</option></select>
+              <select id="workoutMovementFilter"><option value="">All movements</option></select>
+            </div>
             <div id="workoutsList" class="workout-list"></div>
           </div>
         </section>
@@ -245,6 +249,10 @@
             <button type="button" class="btn secondary small" id="newExerciseBtn">+ Add Exercise</button>
           </div>
           <div class="chart-card">
+            <div class="filter-row">
+              <select id="libraryMuscleFilter"><option value="">All muscles</option></select>
+              <select id="libraryMovementFilter"><option value="">All movements</option></select>
+            </div>
             <div id="libraryList" class="workout-list"></div>
           </div>
         </section>
@@ -294,6 +302,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821za"></script>
+<script type="module" src="js/app.js?v=20260821zb"></script>
 </body>
 </html>

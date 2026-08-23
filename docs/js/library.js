@@ -32,13 +32,20 @@ async function deleteOverride(name) {
   if (error) throw error;
 }
 
-export function renderLibraryList(container, onOpen) {
+// filter: { muscle?: muscleKey, movement?: movementKey } -- both optional,
+// AND'd together when both are set. Muscle matches primary or secondary.
+export function renderLibraryList(container, onOpen, filter = {}) {
   container.innerHTML = "";
-  const all = getAllExerciseEntries();
+  const hasFilter = !!(filter.muscle || filter.movement);
+  const all = getAllExerciseEntries().filter((ex) => {
+    if (filter.muscle && !(ex.muscles || {})[filter.muscle]) return false;
+    if (filter.movement && ex.movement !== filter.movement) return false;
+    return true;
+  });
   if (!all.length) {
     const p = document.createElement("p");
     p.className = "chart-empty";
-    p.textContent = "No exercises yet.";
+    p.textContent = hasFilter ? "No exercises match that filter." : "No exercises yet.";
     container.appendChild(p);
     return;
   }

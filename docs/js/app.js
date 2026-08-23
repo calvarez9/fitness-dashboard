@@ -30,6 +30,7 @@ import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksC
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
 import { renderMetricDetail } from "./health.js";
 import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js";
+import { MUSCLES, MOVEMENTS } from "./exerciseLibrary.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -43,6 +44,53 @@ function toast(msg) {
 
 function currentRangeDays() {
   return parseInt($("#rangeSelect").value, 10);
+}
+
+// ---------- Muscle/movement filters (Workouts list + Library list) ----------
+const workoutFilter = { muscle: "", movement: "" };
+const libraryFilter = { muscle: "", movement: "" };
+
+function initFilters() {
+  const muscleOptions = MUSCLES.map((m) => `<option value="${m.key}">${escHtml(m.label)}</option>`).join("");
+  const movementOptions = MOVEMENTS.map((m) => `<option value="${m.key}">${escHtml(m.label)}</option>`).join("");
+
+  $("#workoutMuscleFilter").insertAdjacentHTML("beforeend", muscleOptions);
+  $("#workoutMovementFilter").insertAdjacentHTML("beforeend", movementOptions);
+  $("#libraryMuscleFilter").insertAdjacentHTML("beforeend", muscleOptions);
+  $("#libraryMovementFilter").insertAdjacentHTML("beforeend", movementOptions);
+
+  $("#workoutMuscleFilter").addEventListener("change", (e) => {
+    workoutFilter.muscle = e.target.value;
+    refreshWorkoutsList();
+  });
+  $("#workoutMovementFilter").addEventListener("change", (e) => {
+    workoutFilter.movement = e.target.value;
+    refreshWorkoutsList();
+  });
+  $("#libraryMuscleFilter").addEventListener("change", (e) => {
+    libraryFilter.muscle = e.target.value;
+    renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter);
+  });
+  $("#libraryMovementFilter").addEventListener("change", (e) => {
+    libraryFilter.movement = e.target.value;
+    renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter);
+  });
+}
+
+function escHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Re-renders just the Workouts list against whatever's already loaded --
+// used by the filter dropdowns, which shouldn't need a full data reload.
+function refreshWorkoutsList() {
+  renderWorkoutsList(
+    $("#workoutsList"),
+    (id) => pushModal("workout", id),
+    (id) => pushModal("garminActivity", id),
+    workoutFilter
+  );
+  makeCollapsible($("#workoutsList"));
 }
 
 // ---------- Detail modal: a small back-stack over workout / exercise / movement views ----------
@@ -113,12 +161,7 @@ async function refreshWorkouts(days) {
   const otherTrainingZones = await loadOtherTrainingZones(start, end);
   renderCardioZones($("#otherTrainingZones"), otherTrainingZones, "No other training activity in range yet.");
 
-  renderWorkoutsList(
-    $("#workoutsList"),
-    (id) => pushModal("workout", id),
-    (id) => pushModal("garminActivity", id)
-  );
-  makeCollapsible($("#workoutsList"));
+  refreshWorkoutsList();
 
   renderBarList($("#barExercises"), computeExerciseStats(10), {
     emptyMessage: "No exercises in range yet.",
@@ -204,7 +247,7 @@ function openExerciseEditor(name) {
 
 async function onLibraryChanged() {
   showLibraryList();
-  renderLibraryList($("#libraryList"), openExerciseEditor);
+  renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter);
   toast("Saved ✓");
   // Editing an exercise's movement/muscles/athleticism can change every
   // downstream stat that reads it -- refresh those too, not just the list.
@@ -217,7 +260,7 @@ async function refresh() {
     // Overrides must be loaded before anything computes movement/muscle/
     // athleticism stats, since resolveExerciseMeta() checks them first.
     await loadExerciseOverrides();
-    renderLibraryList($("#libraryList"), openExerciseEditor);
+    renderLibraryList($("#libraryList"), openExerciseEditor, libraryFilter);
     await loadDashboard(currentRangeDays());
     await refreshWorkouts(currentRangeDays());
     await refreshPRBoard();
@@ -287,6 +330,7 @@ function initTabs() {
 function initDashboardUI() {
   initTabs();
   initHealthDetails();
+  initFilters();
 
   $("#newExerciseBtn").addEventListener("click", () => openExerciseEditor(null));
   $("#libraryFormBackBtn").addEventListener("click", showLibraryList);

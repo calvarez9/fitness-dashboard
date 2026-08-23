@@ -113,19 +113,43 @@ async function loadUnlinkedGarminActivities(start, end) {
   return activities.filter((a) => !linkedIds.has(a.id));
 }
 
+// A FitLog workout "trains" a muscle/movement if any of its non-warmup
+// sets' resolved exercise meta says so -- Garmin-only rows have no
+// exercise data at all, so they never match either filter and are
+// dropped from the list whenever one is active (nothing to filter them
+// by otherwise).
+function workoutMatchesFilter(workoutId, { muscle, movement }) {
+  if (!muscle && !movement) return true;
+  const sets = cache.setsByWorkout.get(workoutId) || [];
+  return sets.some((s) => {
+    if (s.is_warmup) return false;
+    const meta = resolveExerciseMeta(s.exercise_name);
+    if (muscle && !(meta.muscles || {})[muscle]) return false;
+    if (movement && meta.movement !== movement) return false;
+    return true;
+  });
+}
+
 // ---------- Workout list + detail ----------
 // onOpen(id): a logged FitLog workout was clicked.
 // onOpenGarmin(id): a Garmin-only activity (no FitLog entry at all) was
 // clicked -- kept as a separate callback since it opens a different,
 // read-only detail view rather than the editable workout one.
-export function renderWorkoutsList(container, onOpen, onOpenGarmin) {
+// filter: { muscle?: muscleKey, movement?: movementKey } -- both optional,
+// AND'd together when both are set.
+export function renderWorkoutsList(container, onOpen, onOpenGarmin, filter = {}) {
   container.innerHTML = "";
-  const fitlogRows = cache.workouts.map((w) => ({ kind: "fitlog", date: new Date(w.date), workout: w }));
-  const garminRows = cache.garminOnly.map((a) => ({ kind: "garmin", date: new Date(a.start_time), activity: a }));
+  const hasFilter = !!(filter.muscle || filter.movement);
+  const fitlogRows = cache.workouts
+    .filter((w) => workoutMatchesFilter(w.id, filter))
+    .map((w) => ({ kind: "fitlog", date: new Date(w.date), workout: w }));
+  const garminRows = hasFilter
+    ? []
+    : cache.garminOnly.map((a) => ({ kind: "garmin", date: new Date(a.start_time), activity: a }));
   const combined = [...fitlogRows, ...garminRows].sort((a, b) => b.date - a.date);
 
   if (!combined.length) {
-    container.appendChild(emptyNote("No workouts in range yet."));
+    container.appendChild(emptyNote(hasFilter ? "No workouts match that filter in range." : "No workouts in range yet."));
     return;
   }
 

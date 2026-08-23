@@ -79,6 +79,9 @@ input, select {
 .btn.secondary { background: var(--surface-3); color: var(--text-primary); }
 .btn.danger { background: var(--critical); color: #fff; }
 .btn.ghost { background: none; border-color: var(--border); color: var(--text-secondary); }
+
+.filter-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.filter-row select { flex: 1; min-width: 0; font-size: 13px; padding: 8px 9px; }
 .btn.block { width: 100%; }
 .btn.small { padding: 6px 12px; font-size: 13px; }
 
