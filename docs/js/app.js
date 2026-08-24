@@ -26,6 +26,7 @@ import {
   loadCardioZones,
   loadOtherTrainingZones,
   renderCardioZones,
+  renderZoneContributionDetail,
 } from "./workouts.js";
 import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
@@ -180,6 +181,7 @@ function renderModalTop() {
   else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "muscle") renderMuscleDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "joint") renderJointDetail(body, top.payload, (name) => pushModal("exercise", name));
+  else if (top.type === "hrZone") renderZoneContributionDetail(body, top.payload.zone, top.payload.contributions);
   else if (top.type === "emphasis") {
     const onOpenExercise = (name) => pushModal("exercise", name);
     if (top.payload === "strength") renderStrengthEmphasisDetail(body, onOpenExercise);
@@ -219,10 +221,14 @@ async function refreshWorkouts(days) {
   renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
 
   const cardioZones = await loadCardioZones(start, end);
-  renderCardioZones($("#cardioZones"), cardioZones, "No cardio activity in range yet.");
+  renderCardioZones($("#cardioZones"), cardioZones, "No cardio activity in range yet.", (zone, contributions) =>
+    pushModal("hrZone", { zone, contributions })
+  );
 
   const otherTrainingZones = await loadOtherTrainingZones(start, end);
-  renderCardioZones($("#otherTrainingZones"), otherTrainingZones, "No other training activity in range yet.");
+  renderCardioZones($("#otherTrainingZones"), otherTrainingZones, "No other training activity in range yet.", (zone, contributions) =>
+    pushModal("hrZone", { zone, contributions })
+  );
 
   refreshWorkoutsList();
 

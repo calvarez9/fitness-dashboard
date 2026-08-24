@@ -1379,27 +1379,42 @@ async function loadZonesWhere(start, end, includeActivity) {
     getEstimatedMaxHR(),
     supabase
       .from("garmin_activities")
-      .select("activity_type, duration_seconds, avg_hr, hr_zone_1_seconds, hr_zone_2_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds")
+      .select("activity_name, activity_type, duration_seconds, avg_hr, hr_zone_1_seconds, hr_zone_2_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds")
       .gte("start_time", start.toISOString())
       .lte("start_time", end.toISOString()),
   ]);
   const { data, error } = activitiesRes;
   const zones = [1, 2, 3, 4, 5].map((n) => ({ n, seconds: 0 }));
+  // Which activities contributed to each zone, and how much -- for the
+  // click-through detail. A real-zone-data activity can land in several
+  // zones at once (its time genuinely split across them); an avg_hr-
+  // classified fallback activity's whole duration goes to the one zone
+  // its average lands in.
+  const contributions = { 1: [], 2: [], 3: [], 4: [], 5: [] };
   if (!error) {
     (data || [])
       .filter(includeActivity)
       .forEach((a) => {
+        const label = a.activity_name || a.activity_type;
         if (a.hr_zone_3_seconds != null) {
           zones.forEach((z) => {
-            z.seconds += a[`hr_zone_${z.n}_seconds`] || 0;
+            const secs = a[`hr_zone_${z.n}_seconds`] || 0;
+            if (secs > 0) {
+              z.seconds += secs;
+              contributions[z.n].push({ label, seconds: secs });
+            }
           });
         } else {
           const zone = classifyZone(a.avg_hr, estimatedMaxHR);
-          if (zone >= 1) zones[zone - 1].seconds += a.duration_seconds || 0;
+          if (zone >= 1) {
+            const secs = a.duration_seconds || 0;
+            zones[zone - 1].seconds += secs;
+            contributions[zone].push({ label, seconds: secs });
+          }
         }
       });
   }
-  return zones;
+  return { zones, contributions };
 }
 
 export async function loadCardioZones(start, end) {
@@ -1417,23 +1432,75 @@ export async function loadOtherTrainingZones(start, end) {
 const ZONE_LABEL = { 1: "Zone 1 · Easy", 2: "Zone 2 · Base", 3: "Zone 3 · Tempo", 4: "Zone 4 · Threshold", 5: "Zone 5 · Max" };
 const ZONE_CLASS = { 1: "hr-zone-1", 2: "hr-zone-2", 3: "hr-zone-3", 4: "hr-zone-4", 5: "hr-zone-5" };
 
-export function renderCardioZones(container, zones, emptyMessage = "No activity in range yet.") {
+// zonesInput: either a plain [{n, seconds}] array (the per-workout/per-
+// activity detail views, which only ever describe one already-specific
+// activity -- nothing to drill into further) or the {zones, contributions}
+// shape from loadCardioZones/loadOtherTrainingZones above. onZoneClick is
+// only wired when contributions are actually available.
+export function renderCardioZones(container, zonesInput, emptyMessage = "No activity in range yet.", onZoneClick) {
+  const zones = Array.isArray(zonesInput) ? zonesInput : zonesInput.zones;
+  const contributions = Array.isArray(zonesInput) ? null : zonesInput.contributions;
   const total = zones.reduce((sum, z) => sum + z.seconds, 0);
   if (!total) {
     container.innerHTML = `<p class="chart-empty">${esc(emptyMessage)}</p>`;
     return;
   }
+  const clickable = contributions && onZoneClick;
   const bar = zones
     .filter((z) => z.seconds > 0)
-    .map((z) => `<div class="sleep-stage-seg ${ZONE_CLASS[z.n]}" style="width:${(z.seconds / total) * 100}%"></div>`)
+    .map(
+      (z) =>
+        `<div class="sleep-stage-seg ${ZONE_CLASS[z.n]}${clickable ? " clickable" : ""}" data-zone="${z.n}" style="width:${(z.seconds / total) * 100}%"></div>`
+    )
     .join("");
   const legend = zones
-    .map((z) => `<span class="sleep-stage-legend-item"><span class="sleep-stage-dot ${ZONE_CLASS[z.n]}"></span>${ZONE_LABEL[z.n]} ${Math.round(z.seconds / 60)}m</span>`)
+    .map(
+      (z) =>
+        `<span class="sleep-stage-legend-item${clickable ? " clickable" : ""}" data-zone="${z.n}"><span class="sleep-stage-dot ${ZONE_CLASS[z.n]}"></span>${ZONE_LABEL[z.n]} ${Math.round(z.seconds / 60)}m</span>`
+    )
     .join("");
   container.innerHTML = `
     <div class="sleep-stage-bar">${bar}</div>
     <div class="sleep-stage-legend">${legend}</div>
   `;
+  if (clickable) {
+    container.querySelectorAll("[data-zone]").forEach((el) => {
+      el.addEventListener("click", () => onZoneClick(Number(el.dataset.zone), contributions[Number(el.dataset.zone)]));
+    });
+  }
+}
+
+// What's contributing to one HR zone -- which activities, and how much of
+// that zone's total time came from each. contributions: [{label, seconds}]
+// for just this zone, already scoped by the caller (loadCardioZones/
+// loadOtherTrainingZones's contributions map).
+export function renderZoneContributionDetail(container, zoneNumber, contributions) {
+  container.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>${esc(ZONE_LABEL[zoneNumber] || `Zone ${zoneNumber}`)}</h4>`;
+  container.appendChild(header);
+
+  if (!contributions || !contributions.length) {
+    container.appendChild(emptyNote("No activity in this zone."));
+    return;
+  }
+
+  // Same activity name can appear more than once (e.g. two separate
+  // Indoor Rowing sessions) -- combine them into one row rather than
+  // showing duplicate labels.
+  const totals = new Map();
+  contributions.forEach((c) => {
+    totals.set(c.label, (totals.get(c.label) || 0) + c.seconds);
+  });
+  const rows = [...totals.entries()]
+    .map(([label, seconds]) => ({ label, value: Math.round(seconds / 60), sub: "min" }))
+    .sort((a, b) => b.value - a.value);
+
+  const list = document.createElement("div");
+  list.className = "bar-list";
+  container.appendChild(list);
+  renderBarList(list, rows);
 }
 
 // ---------- Joint Load: Low Back / Knees / Shoulders ----------

@@ -161,6 +161,9 @@ main#content { padding: 16px 16px 60px; }
 .sleep-stage-seg.hr-zone-3, .sleep-stage-dot.hr-zone-3 { background: var(--warning); }
 .sleep-stage-seg.hr-zone-4, .sleep-stage-dot.hr-zone-4 { background: var(--series-2); }
 .sleep-stage-seg.hr-zone-5, .sleep-stage-dot.hr-zone-5 { background: var(--critical); }
+.sleep-stage-seg.clickable { cursor: pointer; }
+.sleep-stage-legend-item.clickable { cursor: pointer; }
+.sleep-stage-legend-item.clickable:hover { color: var(--text-primary); }
 
 /* ---------- Search ---------- */
 .search-card { display: flex; flex-direction: column; gap: 8px; }
