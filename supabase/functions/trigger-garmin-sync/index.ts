@@ -19,29 +19,53 @@ const GITHUB_OWNER = "calvarez9";
 const GITHUB_REPO = "fitness-dashboard";
 const WORKFLOW_FILE = "garmin-sync.yml";
 
+// Supabase Edge Functions don't add CORS headers on their own -- without
+// these, the browser's preflight OPTIONS request fails before the actual
+// POST is ever sent, which is exactly the "blocked by CORS policy" error
+// this function was hitting from the deployed dashboard (a different
+// origin than the function itself). "*" is fine here (not "credentials"
+// mode, no cookies involved) -- the only thing gating this endpoint is
+// the anon key, same as every other Supabase call this app already makes.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function jsonResponse(body: unknown, status: number) {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...CORS_HEADERS } });
+}
+
 Deno.serve(async (req) => {
+  // The browser sends this automatically before the real POST, for any
+  // cross-origin request with custom headers (which apikey/authorization
+  // both are) -- must be answered with the CORS headers and no body.
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   // Only POST, and only with a valid Supabase anon/authenticated request --
   // supabase.functions.invoke() from the client already sends the right
   // apikey/Authorization headers automatically, this just guards against
   // a bare unauthenticated request from elsewhere hitting the endpoint.
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+    return jsonResponse({ error: "Method not allowed" }, 405);
   }
   const apikey = req.headers.get("apikey");
   if (!apikey) {
-    return new Response(JSON.stringify({ error: "Missing apikey" }), { status: 401 });
+    return jsonResponse({ error: "Missing apikey" }, 401);
   }
 
   const githubPat = Deno.env.get("GITHUB_PAT");
   if (!githubPat) {
-    return new Response(JSON.stringify({ error: "GITHUB_PAT secret not configured on this function" }), { status: 500 });
+    return jsonResponse({ error: "GITHUB_PAT secret not configured on this function" }, 500);
   }
 
-  let body = {};
+  let body: Record<string, unknown> = {};
   try {
     body = await req.json();
   } catch {
-    // no body is fine -- backfill_days/activities_limit are both optional
+    // no body is fine -- backfillDays/activitiesLimit are both optional
   }
   const inputs: Record<string, string> = {};
   if (body.backfillDays) inputs.backfill_days = String(body.backfillDays);
@@ -63,8 +87,8 @@ Deno.serve(async (req) => {
 
   if (!ghRes.ok) {
     const text = await ghRes.text();
-    return new Response(JSON.stringify({ error: `GitHub API ${ghRes.status}: ${text}` }), { status: 502 });
+    return jsonResponse({ error: `GitHub API ${ghRes.status}: ${text}` }, 502);
   }
 
-  return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+  return jsonResponse({ ok: true }, 200);
 });
