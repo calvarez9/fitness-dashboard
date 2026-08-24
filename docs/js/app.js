@@ -30,7 +30,7 @@ import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksC
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
 import { renderMetricDetail } from "./health.js";
 import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js";
-import { MUSCLES, MOVEMENTS } from "./exerciseLibrary.js";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -393,6 +393,19 @@ function initDashboardUI() {
   });
 
   renderBodyMaps($("#bodyFront"), $("#bodyBack"), (muscleKeys) => {
+    // A region whose muscle keys are exactly one MUSCLE_GROUPS entry's
+    // members (e.g. trapezius -> upper/middle/lower traps) opens the
+    // group's own detail view (the upper/middle/lower split + combined
+    // exercise list), not just whichever single sub-muscle happens to
+    // have the most volume -- that was the bug: clicking always jumped
+    // straight to "Upper Traps" alone since it was the only one with any
+    // data, and the split view (which explains that "middle/lower have no
+    // logged volume yet") never got a chance to show.
+    const group = MUSCLE_GROUPS.find((g) => g.members.length === muscleKeys.length && g.members.every((m) => muscleKeys.includes(m)));
+    if (group) {
+      pushModal("muscle", group.key);
+      return;
+    }
     const best = muscleKeys.reduce((a, b) => ((lastMuscleTotals[b] || 0) > (lastMuscleTotals[a] || 0) ? b : a));
     pushModal("muscle", best);
   });
