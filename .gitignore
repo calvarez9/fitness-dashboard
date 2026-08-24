@@ -4,3 +4,4 @@ __pycache__/
 sync/logs/
 sync/boostcamp_export.json
 sync/boostcamp_export.json.rtf
+supabase/.temp/
