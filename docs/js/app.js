@@ -43,6 +43,57 @@ function toast(msg) {
   toast._t = setTimeout(() => (t.hidden = true), 2500);
 }
 
+// Live-ish sync status: GitHub doesn't expose a real percentage for a
+// running workflow, but it does expose live status (queued -> in_progress
+// -> completed), and since this repo is public that's readable straight
+// from the browser with no auth at all -- no need to route this through
+// the Edge Function too. Polls until the run tied to this trigger (the
+// newest run created after we clicked) finishes, or gives up after 3
+// minutes so a stuck poll can't run forever.
+let syncWatchTimer = null;
+async function watchSyncRun(triggeredAt) {
+  clearTimeout(syncWatchTimer);
+  const statusEl = $("#syncStatus");
+  statusEl.className = "sync-status";
+  statusEl.hidden = false;
+  statusEl.textContent = "Syncing…";
+
+  const deadline = triggeredAt + 3 * 60 * 1000;
+  const poll = async () => {
+    if (Date.now() > deadline) {
+      statusEl.textContent = "Still running — check GitHub Actions";
+      return;
+    }
+    let run;
+    try {
+      const res = await fetch("https://api.github.com/repos/calvarez9/fitness-dashboard/actions/workflows/garmin-sync.yml/runs?per_page=5");
+      const data = await res.json();
+      run = (data.workflow_runs || []).find((r) => new Date(r.created_at).getTime() >= triggeredAt - 10000);
+    } catch (e) {
+      console.error(e);
+    }
+    if (!run) {
+      syncWatchTimer = setTimeout(poll, 3000);
+      return;
+    }
+    if (run.status !== "completed") {
+      statusEl.textContent = run.status === "queued" ? "Syncing… (queued)" : "Syncing… (running)";
+      syncWatchTimer = setTimeout(poll, 3000);
+      return;
+    }
+    if (run.conclusion === "success") {
+      statusEl.className = "sync-status success";
+      statusEl.textContent = "Synced ✓";
+      setTimeout(() => (statusEl.hidden = true), 4000);
+      refresh();
+    } else {
+      statusEl.className = "sync-status error";
+      statusEl.innerHTML = `Sync failed ✗ <a href="${run.html_url}" target="_blank" rel="noopener">view run</a>`;
+    }
+  };
+  poll();
+}
+
 function currentRangeDays() {
   return parseInt($("#rangeSelect").value, 10);
 }
@@ -357,10 +408,11 @@ function initDashboardUI() {
     btn.disabled = true;
     const original = btn.textContent;
     btn.textContent = "…";
+    const triggeredAt = Date.now();
     try {
       const { error } = await supabase.functions.invoke("trigger-garmin-sync", { body: {} });
       if (error) throw error;
-      toast("Sync triggered — check back in a minute");
+      watchSyncRun(triggeredAt);
     } catch (e) {
       console.error(e);
       toast("Couldn't trigger sync — see console");
