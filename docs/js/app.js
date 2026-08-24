@@ -22,6 +22,8 @@ import {
   renderCardioIntensityDetail,
   loadJointLoad,
   renderJointLoad,
+  loadMuscleFreshness,
+  renderMuscleFreshness,
   renderJointDetail,
   loadCardioZones,
   loadOtherTrainingZones,
@@ -219,6 +221,12 @@ async function refreshWorkouts(days) {
 
   const jointLoad = await loadJointLoad(start, end);
   renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
+
+  // Deliberately not scoped to the range selector -- freshness is always
+  // "as of right now" (last 10 days vs. trailing 70), same reasoning as
+  // All-Time PRs staying independent of the selected range.
+  const freshness = await loadMuscleFreshness();
+  renderMuscleFreshness($("#muscleFreshness"), freshness);
 
   const cardioZones = await loadCardioZones(start, end);
   renderCardioZones($("#cardioZones"), cardioZones, "No cardio activity in range yet.", (zone, contributions) =>

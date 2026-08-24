@@ -317,6 +317,21 @@ main#content { padding: 16px 16px 60px; }
   .intensity-row { flex-direction: column; }
 }
 
+/* ---------- Muscle Freshness: freshest vs. recently-loaded, side by side ---------- */
+.freshness-row-wrap { display: flex; gap: 10px; }
+.freshness-col { flex: 1; min-width: 0; }
+.freshness-col-title {
+  font-size: 12px; font-weight: 700; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 8px;
+}
+.freshness-row { display: flex; flex-direction: column; gap: 1px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.freshness-row:last-child { border-bottom: none; }
+.freshness-label { font-size: 13px; font-weight: 600; }
+.freshness-meta { font-size: 11px; color: var(--text-muted); }
+@media (max-width: 480px) {
+  .freshness-row-wrap { flex-direction: column; gap: 16px; }
+}
+
 /* ---------- Bar list (exercise / movement / muscle stats) ---------- */
 .bar-list { display: flex; flex-direction: column; gap: 12px; }
 .bar-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
