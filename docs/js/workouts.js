@@ -1082,6 +1082,20 @@ function freshnessLabel(key) {
   return group ? group.label : MUSCLE_LABEL[key] || key;
 }
 
+// Raw muscle key (upperTraps, chest, ...) -> the key it's reported under in
+// Muscle Freshness (traps, chest, ...) -- itself, unless it's a member of
+// one of the MUSCLE_GROUPS.
+function groupKeyFor(muscleKey) {
+  const group = MUSCLE_GROUPS.find((g) => g.members.includes(muscleKey));
+  return group ? group.key : muscleKey;
+}
+
+// Populated by loadMuscleFreshness(): groupKey -> [{workoutId, date, name,
+// credit}], most recent first -- which workouts fed that muscle's acute
+// (last-10-days) number, for the click-through detail. Same "cache what
+// was already loaded for the drill-down" approach as everywhere else here.
+let freshnessContributionsCache = {};
+
 // rawTotals/rawDates are keyed by the *ungrouped* muscle key (upperTraps,
 // etc.) -- collapses each MUSCLE_GROUPS entry's members into one combined
 // total (summed) / one combined last-trained date (the most recent of
@@ -1110,7 +1124,7 @@ export async function loadMuscleFreshness() {
 
   const { data: workouts, error: wErr } = await supabase
     .from("fitlog_workouts")
-    .select("id, date, type")
+    .select("id, date, name, type")
     .gte("date", farStart.toISOString())
     .neq("type", "cardio");
   if (wErr) throw wErr;
@@ -1122,21 +1136,40 @@ export async function loadMuscleFreshness() {
     if (error) throw error;
     sets = data || [];
   }
-  const dateById = Object.fromEntries((workouts || []).map((w) => [w.id, new Date(w.date)]));
+  const workoutById = Object.fromEntries((workouts || []).map((w) => [w.id, { date: new Date(w.date), name: w.name }]));
 
   const acuteRaw = {};
   const chronicRaw = {};
   const lastTrainedRaw = {};
+  // Which workouts fed each muscle GROUP's acute (last-10-days) number --
+  // for the click-through, "what did I do" for that muscle. Keyed by group
+  // key directly (not by raw sub-muscle then merged after), so a workout
+  // that hit e.g. both upper and middle traps shows up as one combined row
+  // instead of two.
+  const acuteContribByGroup = {};
   sets.forEach((s) => {
     if (s.is_warmup) return;
-    const date = dateById[s.workout_id];
-    if (!date) return;
+    const w = workoutById[s.workout_id];
+    if (!w) return;
+    const { date } = w;
     const meta = resolveExerciseMeta(s.exercise_name);
     Object.entries(meta.muscles || {}).forEach(([muscle, frac]) => {
       if (date >= chronicStart) chronicRaw[muscle] = (chronicRaw[muscle] || 0) + frac;
-      if (date >= acuteStart) acuteRaw[muscle] = (acuteRaw[muscle] || 0) + frac;
       if (!lastTrainedRaw[muscle] || date > lastTrainedRaw[muscle]) lastTrainedRaw[muscle] = date;
+      if (date >= acuteStart) {
+        acuteRaw[muscle] = (acuteRaw[muscle] || 0) + frac;
+        const groupKey = groupKeyFor(muscle);
+        if (!acuteContribByGroup[groupKey]) acuteContribByGroup[groupKey] = new Map();
+        const byWorkout = acuteContribByGroup[groupKey];
+        if (!byWorkout.has(s.workout_id)) byWorkout.set(s.workout_id, { workoutId: s.workout_id, date, name: w.name, credit: 0 });
+        byWorkout.get(s.workout_id).credit += frac;
+      }
     });
+  });
+
+  freshnessContributionsCache = {};
+  Object.entries(acuteContribByGroup).forEach(([key, byWorkout]) => {
+    freshnessContributionsCache[key] = [...byWorkout.values()].sort((a, b) => b.date - a.date);
   });
 
   const acute = collapseMuscleMap(acuteRaw);
@@ -1165,7 +1198,7 @@ export async function loadMuscleFreshness() {
     .filter(Boolean);
 }
 
-export function renderMuscleFreshness(container, rows) {
+export function renderMuscleFreshness(container, rows, onOpenMuscle) {
   if (!rows.length) {
     container.innerHTML = `<p class="chart-empty">Not enough history yet.</p>`;
     return;
@@ -1180,8 +1213,14 @@ export function renderMuscleFreshness(container, rows) {
     .sort((a, b) => rank(b) - rank(a))
     .slice(0, 5);
 
+  const clickable = !!onOpenMuscle;
   const rowsHtml = (list) =>
-    list.map((r) => `<div class="freshness-row"><span class="freshness-label">${esc(r.label)}</span><span class="freshness-meta">${dayText(r.daysSince)} · ${ratioText(r.ratio)}</span></div>`).join("");
+    list
+      .map(
+        (r) =>
+          `<${clickable ? "button type=\"button\"" : "div"} class="freshness-row${clickable ? " clickable" : ""}" data-key="${r.key}"><span class="freshness-label">${esc(r.label)}</span><span class="freshness-meta">${dayText(r.daysSince)} · ${ratioText(r.ratio)}</span></${clickable ? "button" : "div"}>`
+      )
+      .join("");
 
   container.innerHTML = `
     <div class="freshness-col">
@@ -1193,6 +1232,48 @@ export function renderMuscleFreshness(container, rows) {
       ${loaded.length ? rowsHtml(loaded) : '<p class="chart-empty">Nothing loaded recently.</p>'}
     </div>
   `;
+  if (clickable) {
+    container.querySelectorAll("[data-key]").forEach((el) => {
+      el.addEventListener("click", () => onOpenMuscle(el.dataset.key));
+    });
+  }
+}
+
+// Which workouts fed a muscle group's acute (last-10-days) number, most
+// recent first -- reads straight from the cache loadMuscleFreshness()
+// already populated, same "reuse what's already loaded" approach as every
+// other drill-down here.
+export function renderMuscleFreshnessDetail(container, key, onOpenWorkout) {
+  container.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>${esc(freshnessLabel(key))} — last ${ACUTE_DAYS} days</h4>`;
+  container.appendChild(header);
+
+  const contributions = freshnessContributionsCache[key] || [];
+  if (!contributions.length) {
+    container.appendChild(emptyNote("No workouts in the last 10 days touched this muscle."));
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "workout-list";
+  container.appendChild(list);
+  contributions.forEach((c) => {
+    const dateLabel = c.date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "workout-row";
+    row.innerHTML = `
+      <span class="workout-row-date">${esc(dateLabel)}</span>
+      <span class="workout-row-main">
+        <span class="workout-row-name">${esc(c.name || "Workout")}</span>
+        <span class="workout-row-sub">${round(c.credit)} credited set${round(c.credit) === 1 ? "" : "s"}</span>
+      </span>
+    `;
+    row.addEventListener("click", () => onOpenWorkout(c.workoutId));
+    list.appendChild(row);
+  });
 }
 
 // ---------- All-time PRs (independent of the dashboard's date-range selector) ----------

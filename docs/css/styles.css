@@ -326,6 +326,11 @@ main#content { padding: 16px 16px 60px; }
 }
 .freshness-row { display: flex; flex-direction: column; gap: 1px; padding: 7px 0; border-bottom: 1px solid var(--border); }
 .freshness-row:last-child { border-bottom: none; }
+.freshness-row.clickable {
+  width: 100%; background: none; border: none; border-bottom: 1px solid var(--border);
+  cursor: pointer; text-align: left; font-family: var(--font); border-radius: var(--radius-s);
+}
+.freshness-row.clickable:hover { background: var(--surface-3); }
 .freshness-label { font-size: 13px; font-weight: 600; }
 .freshness-meta { font-size: 11px; color: var(--text-muted); }
 @media (max-width: 480px) {

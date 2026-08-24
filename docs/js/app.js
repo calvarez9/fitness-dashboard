@@ -24,6 +24,7 @@ import {
   renderJointLoad,
   loadMuscleFreshness,
   renderMuscleFreshness,
+  renderMuscleFreshnessDetail,
   renderJointDetail,
   loadCardioZones,
   loadOtherTrainingZones,
@@ -183,6 +184,7 @@ function renderModalTop() {
   else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "muscle") renderMuscleDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "joint") renderJointDetail(body, top.payload, (name) => pushModal("exercise", name));
+  else if (top.type === "muscleFreshness") renderMuscleFreshnessDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "hrZone") renderZoneContributionDetail(body, top.payload.zone, top.payload.contributions);
   else if (top.type === "emphasis") {
     const onOpenExercise = (name) => pushModal("exercise", name);
@@ -226,7 +228,7 @@ async function refreshWorkouts(days) {
   // "as of right now" (last 10 days vs. trailing 70), same reasoning as
   // All-Time PRs staying independent of the selected range.
   const freshness = await loadMuscleFreshness();
-  renderMuscleFreshness($("#muscleFreshness"), freshness);
+  renderMuscleFreshness($("#muscleFreshness"), freshness, (key) => pushModal("muscleFreshness", key));
 
   const cardioZones = await loadCardioZones(start, end);
   renderCardioZones($("#cardioZones"), cardioZones, "No cardio activity in range yet.", (zone, contributions) =>
