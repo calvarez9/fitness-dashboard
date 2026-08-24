@@ -4,26 +4,26 @@
 // backed by the exercise_overrides table instead of localStorage, so it's
 // reachable from the dashboard directly rather than only from FitLog.
 import { supabase } from "./supabaseClient.js";
-import { MUSCLES, MOVEMENTS, MOVEMENT_LABEL, JOINTS, JOINT_LABEL, getAllExerciseEntries, setExerciseOverrides } from "./exerciseLibrary.js";
+import { MUSCLES, MOVEMENTS, MOVEMENT_LABEL, JOINTS, JOINT_LABEL, METRIC_TYPES, getAllExerciseEntries, setExerciseOverrides } from "./exerciseLibrary.js";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 export async function loadExerciseOverrides() {
-  const { data, error } = await supabase.from("exercise_overrides").select("name, movement, muscles, athleticism, joint_load, created_at");
+  const { data, error } = await supabase.from("exercise_overrides").select("name, movement, muscles, athleticism, joint_load, metric_type, created_at");
   if (error) throw error;
   setExerciseOverrides(data || []);
 }
 
-async function saveOverride({ name, movement, muscles, athleticism, jointLoad }, originalName) {
+async function saveOverride({ name, movement, muscles, athleticism, jointLoad, metricType }, originalName) {
   if (originalName && originalName !== name) {
     const { error } = await supabase.from("exercise_overrides").delete().eq("name", originalName);
     if (error) throw error;
   }
   const { error } = await supabase
     .from("exercise_overrides")
-    .upsert({ name, movement, muscles, athleticism: athleticism || 0, joint_load: jointLoad || {} }, { onConflict: "name" });
+    .upsert({ name, movement, muscles, athleticism: athleticism || 0, joint_load: jointLoad || {}, metric_type: metricType || "weighted" }, { onConflict: "name" });
   if (error) throw error;
 }
 
@@ -102,6 +102,7 @@ export function renderExerciseForm(container, name, onDone) {
   const muscles = existing?.muscles || {};
   const athleticism = existing?.athleticism || 0;
   const jointLoad = existing?.jointLoad || {};
+  const metricType = existing?.metricType || "weighted";
   const canDelete = !isNew && existing && (existing.isCustom || existing.isOverride);
 
   const primaryKeys = Object.keys(muscles).filter((k) => muscles[k] === 1);
@@ -113,6 +114,10 @@ export function renderExerciseForm(container, name, onDone) {
     <div class="edit-field">
       <label>Movement pattern</label>
       <select id="libFormMovement">${MOVEMENTS.map((m) => `<option value="${m.key}" ${m.key === movement ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>
+    </div>
+    <div class="edit-field">
+      <label>Log type</label>
+      <select id="libFormMetricType">${METRIC_TYPES.map((m) => `<option value="${m.key}" ${m.key === metricType ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select>
     </div>
     <div class="edit-field"><label>Athleticism (0 = none, 0.2–0.5 = compound, 1 = explosive/power)</label><input type="number" id="libFormAthleticism" min="0" max="1.5" step="0.1" value="${athleticism || ""}" placeholder="0" /></div>
     <div class="edit-field">
@@ -149,6 +154,7 @@ export function renderExerciseForm(container, name, onDone) {
       return;
     }
     const newMovement = container.querySelector("#libFormMovement").value;
+    const newMetricType = container.querySelector("#libFormMetricType").value;
     const newAthleticism = parseFloat(container.querySelector("#libFormAthleticism").value) || 0;
     const newJointLoad = {};
     JOINTS.forEach((j) => {
@@ -167,7 +173,7 @@ export function renderExerciseForm(container, name, onDone) {
     btn.disabled = true;
     btn.textContent = "Saving…";
     try {
-      await saveOverride({ name: newName, movement: newMovement, muscles: newMuscles, athleticism: newAthleticism, jointLoad: newJointLoad }, name);
+      await saveOverride({ name: newName, movement: newMovement, muscles: newMuscles, athleticism: newAthleticism, jointLoad: newJointLoad, metricType: newMetricType }, name);
       await loadExerciseOverrides();
       if (onDone) onDone();
     } catch (e) {

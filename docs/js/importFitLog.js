@@ -81,6 +81,7 @@ export async function importFitLogBackup(data, onProgress) {
             set_index: i,
             reps: s.reps,
             weight: s.weight,
+            duration: s.duration,
             rpe: s.rpe,
             is_warmup: !!s.isWarmup,
             done: !!s.done,

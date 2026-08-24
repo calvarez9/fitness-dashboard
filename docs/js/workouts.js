@@ -414,11 +414,20 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
 
   order.forEach((name) => {
     const exSets = [...byExercise.get(name)].sort((a, b) => a.set_index - b.set_index);
+    const metricType = resolveExerciseMeta(name).metricType || "weighted";
     const rowsHtml = exSets
       .map((s) => {
         const parts = [];
-        if (s.weight != null) parts.push(`${s.weight} lb`);
-        if (s.reps != null) parts.push(`${s.reps} reps`);
+        // Isometric/Loaded Carry sets carry a duration instead of (or
+        // alongside) weight/reps -- shown by whichever fields are actually
+        // present rather than assuming weight x reps for every type.
+        if (metricType === "isometric") {
+          if (s.duration != null) parts.push(`${s.duration}s`);
+        } else {
+          if (s.weight != null) parts.push(`${s.weight} lb`);
+          if (s.reps != null) parts.push(`${s.reps} reps`);
+          if (s.duration != null) parts.push(`${s.duration}s`);
+        }
         if (s.rpe != null) parts.push(`RPE ${s.rpe}`);
         const label = parts.length ? parts.join(" × ") : "—";
         return `<div class="set-row${s.is_warmup ? " warmup" : ""}"><span class="set-marker">${s.is_warmup ? "W" : "·"}</span><span>${esc(label)}</span></div>`;
@@ -913,13 +922,16 @@ export function renderExerciseDetail(container, exerciseName, onOpenWorkout) {
 
   renderProgressSection(container, sessions);
 
+  const metricType = resolveExerciseMeta(exerciseName).metricType || "weighted";
   sessions.forEach(({ workout, sets }) => {
     const dateLabel = new Date(workout.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
     const setSummary = sets
       .map((s) => {
+        if (metricType === "isometric") return s.duration != null ? `${s.duration}s` : "—";
         const parts = [];
         if (s.weight != null) parts.push(`${s.weight}`);
         if (s.reps != null) parts.push(`×${s.reps}`);
+        if (s.duration != null) parts.push(`${s.duration}s`);
         return parts.length ? parts.join(" ") : "—";
       })
       .join(", ");

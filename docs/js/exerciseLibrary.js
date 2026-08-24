@@ -79,6 +79,18 @@ export const JOINTS = [
 ];
 export const JOINT_LABEL = Object.fromEntries(JOINTS.map((j) => [j.key, j.label]));
 
+// How a set of this exercise gets logged -- mirrors FitLog's own
+// exerciseLibrary.js. "weighted" (the default, absent on most entries) is
+// weight x reps as always. Cardio Machine (distance + time) isn't here --
+// already fully covered by the separate cardio workout type.
+export const METRIC_TYPES = [
+  { key: "weighted", label: "Weighted (weight × reps)" },
+  { key: "bodyweight", label: "Bodyweight (reps only)" },
+  { key: "isometric", label: "Isometric Hold (time only)" },
+  { key: "loadedCarry", label: "Loaded Carry (weight × time)" },
+];
+export const METRIC_TYPE_LABEL = Object.fromEntries(METRIC_TYPES.map((m) => [m.key, m.label]));
+
 // Vertical/horizontal push (and pull) are tracked separately above -- real
 // distinctions worth seeing on their own -- but they're also both still
 // "push" in the everyday sense, so Movement Pattern Volume shows both: a
@@ -108,7 +120,7 @@ export const BUILTIN_EXERCISES = {
   "Barbell Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 }, athleticism: 0.2, jointLoad: { lowBack: 0.4, shoulders: 0.2 } },
   "Pull-Up": { movement: "verticalPull", muscles: { lats: 1, upperBack: 0.5, biceps: 0.5 }, athleticism: 0.3, jointLoad: { shoulders: 0.3 } },
   "Chin-Up": { movement: "verticalPull", muscles: { lats: 1, biceps: 1, upperBack: 0.5 }, athleticism: 0.3, jointLoad: { shoulders: 0.2 } },
-  "Push-Up": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 }, athleticism: 0.2, jointLoad: { shoulders: 0.3 } },
+  "Push-Up": { movement: "horizontalPush", muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 }, athleticism: 0.2, jointLoad: { shoulders: 0.3 }, metricType: "bodyweight" },
   "Dip": { movement: "verticalPush", muscles: { triceps: 1, chest: 0.5, frontDelts: 0.5 }, athleticism: 0.2, jointLoad: { shoulders: 0.4 } },
   "Lat Pulldown": { movement: "verticalPull", muscles: { lats: 1, upperBack: 0.5, biceps: 0.5 }, jointLoad: { shoulders: 0.2 } },
   "Seated Cable Row": { movement: "horizontalPull", muscles: { upperBack: 1, lats: 0.5, biceps: 0.5 }, jointLoad: { shoulders: 0.1 } },
@@ -129,9 +141,9 @@ export const BUILTIN_EXERCISES = {
   "Walking Lunge": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5, hipFlexors: 0.5 }, athleticism: 0.3, jointLoad: { knees: 0.6, lowBack: 0.2 } },
   "Bulgarian Split Squat": { movement: "lunge", muscles: { quadriceps: 1, glutes: 1, hamstrings: 0.5, adductors: 0.5, abductors: 0.5 }, athleticism: 0.3, jointLoad: { knees: 0.7 } },
   "Calf Raise": { movement: "isolation", muscles: { calves: 1 }, jointLoad: { knees: 0.1 } },
-  "Plank": { movement: "core", muscles: { abs: 1, obliques: 0.5 }, jointLoad: { lowBack: 0.2 } },
+  "Plank": { movement: "core", muscles: { abs: 1, obliques: 0.5 }, jointLoad: { lowBack: 0.2 }, metricType: "isometric" },
   "Hanging Leg Raise": { movement: "core", muscles: { abs: 1, hipFlexors: 1, obliques: 0.5 }, jointLoad: { shoulders: 0.3, lowBack: 0.1 } },
-  "Side Plank": { movement: "core", muscles: { obliques: 1, abs: 0.5 }, jointLoad: { lowBack: 0.1 } },
+  "Side Plank": { movement: "core", muscles: { obliques: 1, abs: 0.5 }, jointLoad: { lowBack: 0.1 }, metricType: "isometric" },
   "Bird Dog": { movement: "core", muscles: { lowerBack: 1, abs: 0.5, glutes: 0.5 }, jointLoad: { lowBack: 0.2 } },
   "Sumo Deadlift": { movement: "hinge", muscles: { adductors: 1, glutes: 1, hamstrings: 0.5, spinalErectors: 0.5, quadriceps: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 0.8, knees: 0.3 } },
   "Hip Adduction Machine": { movement: "isolation", muscles: { adductors: 1 }, jointLoad: { knees: 0.1 } },
@@ -143,7 +155,7 @@ export const BUILTIN_EXERCISES = {
   "Front Raise": { movement: "isolation", muscles: { frontDelts: 1 }, jointLoad: { shoulders: 0.4 } },
   "Shrug": { movement: "isolation", muscles: { upperTraps: 1 } },
   "Good Morning": { movement: "hinge", muscles: { hamstrings: 1, spinalErectors: 1, glutes: 0.5 }, athleticism: 0.3, jointLoad: { lowBack: 0.9 } },
-  "Farmer's Carry": { movement: "isolation", muscles: { forearms: 1, upperTraps: 0.5, abs: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 0.3, shoulders: 0.2 } },
+  "Farmer's Carry": { movement: "isolation", muscles: { forearms: 1, upperTraps: 0.5, abs: 0.5 }, athleticism: 0.5, jointLoad: { lowBack: 0.3, shoulders: 0.2 }, metricType: "loadedCarry" },
 };
 
 // Explosive/power movements -- jumps, throws, Olympic lifts, and similar --
@@ -200,7 +212,7 @@ const EXTRA_EXERCISES = {
   "Jog": { movement: "isolation", muscles: { quadriceps: 0.5, hamstrings: 0.5, calves: 1 } },
 };
 
-export const EMPTY_META = { movement: "isolation", muscles: {}, athleticism: 0, jointLoad: {} };
+export const EMPTY_META = { movement: "isolation", muscles: {}, athleticism: 0, jointLoad: {}, metricType: "weighted" };
 
 const ALL_EXERCISES = { ...BUILTIN_EXERCISES, ...ATHLETICISM_EXERCISES, ...EXTRA_EXERCISES };
 
@@ -249,7 +261,7 @@ const ALIASES = {
 // (checked first, below); a new name adds a custom exercise -- the same
 // "override vs custom" model FitLog already uses locally, just synced
 // through Supabase here instead of localStorage.
-let OVERRIDES = new Map(); // normKey(name) -> { name, movement, muscles, athleticism, jointLoad, createdAt }
+let OVERRIDES = new Map(); // normKey(name) -> { name, movement, muscles, athleticism, jointLoad, metricType, createdAt }
 
 export function setExerciseOverrides(rows) {
   OVERRIDES = new Map(
@@ -261,6 +273,7 @@ export function setExerciseOverrides(rows) {
         muscles: r.muscles || {},
         athleticism: r.athleticism || 0,
         jointLoad: r.joint_load || {},
+        metricType: r.metric_type || "weighted",
         createdAt: r.created_at ? new Date(r.created_at).getTime() : 0,
       },
     ])
@@ -282,6 +295,7 @@ export function getAllExerciseEntries() {
       muscles: meta.muscles || {},
       athleticism: meta.athleticism || 0,
       jointLoad: meta.jointLoad || {},
+      metricType: meta.metricType || "weighted",
       isCustom: false,
       isOverride: false,
       createdAt: 0,
@@ -310,6 +324,7 @@ export function resolveExerciseMeta(rawName) {
       muscles: override.muscles,
       athleticism: override.athleticism,
       jointLoad: override.jointLoad,
+      metricType: override.metricType || "weighted",
       matched: true,
       canonicalName: override.name,
     };
