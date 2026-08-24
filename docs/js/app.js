@@ -1,4 +1,5 @@
 import { loadDashboard } from "./dashboard.js";
+import { supabase } from "./supabaseClient.js";
 import { importFitLogBackup } from "./importFitLog.js";
 import { renderBarList, makeCollapsible } from "./charts.js";
 import {
@@ -350,6 +351,23 @@ function initDashboardUI() {
 
   $("#importBtn").addEventListener("click", () => {
     $("#importModal").hidden = false;
+  });
+  $("#syncNowBtn").addEventListener("click", async () => {
+    const btn = $("#syncNowBtn");
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = "…";
+    try {
+      const { error } = await supabase.functions.invoke("trigger-garmin-sync", { body: {} });
+      if (error) throw error;
+      toast("Sync triggered — check back in a minute");
+    } catch (e) {
+      console.error(e);
+      toast("Couldn't trigger sync — see console");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
   });
   $("#importClose").addEventListener("click", () => {
     $("#importModal").hidden = true;
