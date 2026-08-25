@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260826d";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826d";
-import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260826d";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826d";
+import { supabase } from "./supabaseClient.js?v=20260826e";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826e";
+import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260826e";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826e";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -855,7 +855,7 @@ function sessionsForExercise(exerciseName) {
 // (matches FitLog's own progress view). Skips sessions with no weight data
 // at all (bodyweight/time-based exercises), and renders nothing if none of
 // the sessions have weight data.
-function renderProgressSection(container, sessions) {
+function renderProgressSection(container, sessions, onOpenWorkout) {
   const points = [];
   [...sessions]
     .sort((a, b) => new Date(a.workout.date) - new Date(b.workout.date))
@@ -872,6 +872,7 @@ function renderProgressSection(container, sessions) {
           value: Math.round(best.oneRM),
           topWeight: best.weight,
           label: new Date(workout.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+          workoutId: workout.id,
         });
       }
     });
@@ -904,7 +905,7 @@ function renderProgressSection(container, sessions) {
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   chartCard.appendChild(svg);
   container.appendChild(chartCard);
-  renderProgressChart(svg, points, { yLabel: "lb (est. 1RM)" });
+  renderProgressChart(svg, points, { yLabel: "lb (est. 1RM)", onPointClick: (p) => onOpenWorkout(p.workoutId) });
 }
 
 export function renderExerciseDetail(container, exerciseName, onOpenWorkout) {
@@ -920,7 +921,7 @@ export function renderExerciseDetail(container, exerciseName, onOpenWorkout) {
     return;
   }
 
-  renderProgressSection(container, sessions);
+  renderProgressSection(container, sessions, onOpenWorkout);
 
   const metricType = resolveExerciseMeta(exerciseName).metricType || "weighted";
   sessions.forEach(({ workout, sets }) => {
@@ -2028,13 +2029,21 @@ function startOfWeek(d) {
 // else in this section.
 let jointLoadHistoryCache = {};
 
+// Populated alongside it -- jointKey -> weekKey (the same ISO date string
+// used as each chart point's x) -> [{workoutId, date, name, credit}], for
+// renderJointWeekDetail when a chart point gets clicked. Same idea as
+// freshnessContributionsCache, just bucketed by week instead of "the last
+// 10 days" as a single unit.
+let jointLoadWeeklyWorkoutsCache = {};
+
 export async function loadJointLoadHistory() {
   const now = new Date();
   const start = new Date(now.getTime() - JOINT_HISTORY_WEEKS * 7 * 24 * 60 * 60 * 1000);
 
-  const { data: workouts, error: wErr } = await supabase.from("fitlog_workouts").select("id, date").gte("date", start.toISOString());
+  const { data: workouts, error: wErr } = await supabase.from("fitlog_workouts").select("id, date, name").gte("date", start.toISOString());
   if (wErr || !workouts?.length) {
     jointLoadHistoryCache = {};
+    jointLoadWeeklyWorkoutsCache = {};
     return;
   }
   const { data: sets, error: sErr } = await supabase
@@ -2046,20 +2055,29 @@ export async function loadJointLoadHistory() {
     );
   if (sErr) {
     jointLoadHistoryCache = {};
+    jointLoadWeeklyWorkoutsCache = {};
     return;
   }
-  const dateByWorkout = new Map(workouts.map((w) => [w.id, new Date(w.date)]));
+  const workoutById = Object.fromEntries(workouts.map((w) => [w.id, { date: new Date(w.date), name: w.name }]));
 
   // jointKey -> weekKey (ISO date string) -> total
   const byJoint = Object.fromEntries(JOINTS.map((j) => [j.key, {}]));
+  // jointKey -> weekKey -> workoutId -> {workoutId, date, name, credit}
+  const workoutsByJointWeek = Object.fromEntries(JOINTS.map((j) => [j.key, {}]));
   (sets || []).forEach((s) => {
     if (s.is_warmup) return;
-    const date = dateByWorkout.get(s.workout_id);
-    if (!date) return;
-    const wk = startOfWeek(date).toISOString().slice(0, 10);
+    const w = workoutById[s.workout_id];
+    if (!w) return;
+    const wk = startOfWeek(w.date).toISOString().slice(0, 10);
     Object.entries(resolveExerciseMeta(s.exercise_name).jointLoad || {}).forEach(([joint, load]) => {
       if (!byJoint[joint]) return; // a joint outside JOINTS (shouldn't happen, but stay defensive)
       byJoint[joint][wk] = (byJoint[joint][wk] || 0) + load;
+
+      const byWeek = workoutsByJointWeek[joint];
+      if (!byWeek[wk]) byWeek[wk] = new Map();
+      const byWorkout = byWeek[wk];
+      if (!byWorkout.has(s.workout_id)) byWorkout.set(s.workout_id, { workoutId: s.workout_id, date: w.date, name: w.name, credit: 0 });
+      byWorkout.get(s.workout_id).credit += load;
     });
   });
 
@@ -2074,6 +2092,12 @@ export async function loadJointLoadHistory() {
 
   jointLoadHistoryCache = Object.fromEntries(
     JOINTS.map((j) => [j.key, weekKeys.map((wk) => ({ x: new Date(wk), y: round(byJoint[j.key][wk] || 0) }))])
+  );
+  jointLoadWeeklyWorkoutsCache = Object.fromEntries(
+    JOINTS.map((j) => [
+      j.key,
+      Object.fromEntries(Object.entries(workoutsByJointWeek[j.key]).map(([wk, m]) => [wk, [...m.values()].sort((a, b) => b.date - a.date)])),
+    ])
   );
 }
 
@@ -2110,7 +2134,7 @@ export function renderJointLoad(container, { current, prev }, onOpenJoint) {
 // to one joint's load, and how much -- reads straight from the cache
 // loadJointLoad() already populated, same "reuse what's already loaded"
 // approach as Muscle Freshness's drill-down.
-export function renderJointDetail(container, jointKey, onOpenExercise) {
+export function renderJointDetail(container, jointKey, onOpenExercise, onOpenWeek) {
   container.innerHTML = "";
   const header = document.createElement("div");
   header.className = "workout-detail-header";
@@ -2125,7 +2149,15 @@ export function renderJointDetail(container, jointKey, onOpenExercise) {
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   chartWrap.appendChild(svg);
   container.appendChild(chartWrap);
-  renderTrendChart(svg, jointLoadHistoryCache[jointKey] || [], { emptyMessage: "No history yet.", yUnit: "" });
+  renderTrendChart(svg, jointLoadHistoryCache[jointKey] || [], {
+    emptyMessage: "No history yet.",
+    yUnit: "",
+    onPointClick: (p) => onOpenWeek({ jointKey, weekKey: p.x.toISOString().slice(0, 10) }),
+  });
+  const hint = document.createElement("p");
+  hint.className = "muted small";
+  hint.textContent = "Tap a point to see that week's workouts.";
+  container.appendChild(hint);
 
   const subhead = document.createElement("div");
   subhead.className = "workout-detail-header";
@@ -2145,4 +2177,41 @@ export function renderJointDetail(container, jointKey, onOpenExercise) {
   list.className = "bar-list";
   container.appendChild(list);
   renderBarList(list, rows, { onClick: (r) => onOpenExercise(r.label) });
+}
+
+// Which workouts fed one week's point on a joint's trend chart -- reads
+// straight from the cache loadJointLoadHistory() already populated, same
+// "reuse what's already loaded" approach as every other drill-down here.
+export function renderJointWeekDetail(container, { jointKey, weekKey }, onOpenWorkout) {
+  container.innerHTML = "";
+  const weekLabel = new Date(weekKey).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const header = document.createElement("div");
+  header.className = "workout-detail-header";
+  header.innerHTML = `<h4>${esc(JOINT_LABEL[jointKey] || jointKey)} — week of ${esc(weekLabel)}</h4>`;
+  container.appendChild(header);
+
+  const contributions = jointLoadWeeklyWorkoutsCache[jointKey]?.[weekKey] || [];
+  if (!contributions.length) {
+    container.appendChild(emptyNote("No workouts loaded this joint that week."));
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "workout-list";
+  container.appendChild(list);
+  contributions.forEach((c) => {
+    const dateLabel = c.date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "workout-row";
+    row.innerHTML = `
+      <span class="workout-row-date">${esc(dateLabel)}</span>
+      <span class="workout-row-main">
+        <span class="workout-row-name">${esc(c.name || "Workout")}</span>
+        <span class="workout-row-sub">${round(c.credit)} credited load</span>
+      </span>
+    `;
+    row.addEventListener("click", () => onOpenWorkout(c.workoutId));
+    list.appendChild(row);
+  });
 }

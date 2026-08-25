@@ -134,6 +134,7 @@ main#content { padding: 16px 16px 60px; }
 .trend-svg .band { fill: var(--series-1); opacity: 0.15; }
 .trend-svg .dot-a { fill: var(--series-1); }
 .trend-svg .dot-b { fill: var(--series-2); }
+.trend-svg .dot-hit { fill: transparent; cursor: pointer; }
 .trend-svg .legend-text { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
 .chart-empty { color: var(--text-muted); font-size: 13px; padding: 30px; text-align: center; }
 

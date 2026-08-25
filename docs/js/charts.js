@@ -101,6 +101,14 @@ export function renderTrendChart(svg, points, opts = {}) {
     const path = valid.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.x)} ${y(p.y)}`).join(" ");
     svg.appendChild(el("path", { class: "series-a", d: path }));
     valid.forEach((p) => {
+      // A bare 2.5px dot is a tiny, easy-to-miss tap target -- when a click
+      // handler is given, an invisible larger circle underneath it actually
+      // catches the tap without changing how the chart looks.
+      if (opts.onPointClick) {
+        const hit = el("circle", { class: "dot-hit", cx: x(p.x), cy: y(p.y), r: 12 });
+        hit.addEventListener("click", () => opts.onPointClick(p));
+        svg.appendChild(hit);
+      }
       svg.appendChild(el("circle", { class: "dot-a", cx: x(p.x), cy: y(p.y), r: 2.5 }));
     });
   }
@@ -151,7 +159,7 @@ export function renderBarList(container, rows, opts = {}) {
  * the <svg> for the matching CSS.
  * points: [{ date: Date, value: number, isPR: bool, label: string }]
  */
-export function renderProgressChart(svg, points, { yLabel = "" } = {}) {
+export function renderProgressChart(svg, points, { yLabel = "", onPointClick } = {}) {
   svg.innerHTML = "";
   const W = 600, H = 220;
   const padL = 40, padR = 16, padT = 16, padB = 28;
@@ -202,7 +210,15 @@ export function renderProgressChart(svg, points, { yLabel = "" } = {}) {
 
   points.forEach((p, i) => {
     const c = el("circle", { class: "trend-point" + (p.isPR ? " pr" : ""), cx: x(i), cy: y(p.value), r: p.isPR ? 6 : 4 });
+    c.style.cursor = "pointer";
     c.addEventListener("click", () => {
+      // Jumping straight to the workout beats a tooltip -- the same date
+      // and value are right there in the session list under this chart,
+      // one tap away from the actual sets is strictly more useful.
+      if (onPointClick) {
+        onPointClick(p, i);
+        return;
+      }
       tooltipText1.textContent = p.label;
       tooltipText2.textContent = `${p.value.toLocaleString()} ${yLabel}${p.isPR ? " · PR" : ""}`;
       let tx = x(i) - 45;

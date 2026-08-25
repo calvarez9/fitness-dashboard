@@ -1,7 +1,7 @@
-import { loadDashboard } from "./dashboard.js?v=20260826d";
-import { supabase } from "./supabaseClient.js?v=20260826d";
-import { importFitLogBackup } from "./importFitLog.js?v=20260826d";
-import { renderBarList, makeCollapsible } from "./charts.js?v=20260826d";
+import { loadDashboard } from "./dashboard.js?v=20260826e";
+import { supabase } from "./supabaseClient.js?v=20260826e";
+import { importFitLogBackup } from "./importFitLog.js?v=20260826e";
+import { renderBarList, makeCollapsible } from "./charts.js?v=20260826e";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -30,16 +30,17 @@ import {
   loadReadyToTrain,
   renderReadyToTrain,
   renderJointDetail,
+  renderJointWeekDetail,
   loadCardioZones,
   loadOtherTrainingZones,
   renderCardioZones,
   renderZoneContributionDetail,
-} from "./workouts.js?v=20260826d";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826d";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826d";
-import { renderMetricDetail } from "./health.js?v=20260826d";
-import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826d";
-import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826d";
+} from "./workouts.js?v=20260826e";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826e";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826e";
+import { renderMetricDetail } from "./health.js?v=20260826e";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826e";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826e";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -187,7 +188,14 @@ function renderModalTop() {
   else if (top.type === "exercise") renderExerciseDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "movement") renderMovementDetail(body, top.payload, (name) => pushModal("exercise", name));
   else if (top.type === "muscle") renderMuscleDetail(body, top.payload, (name) => pushModal("exercise", name));
-  else if (top.type === "joint") renderJointDetail(body, top.payload, (name) => pushModal("exercise", name));
+  else if (top.type === "joint")
+    renderJointDetail(
+      body,
+      top.payload,
+      (name) => pushModal("exercise", name),
+      (weekPayload) => pushModal("jointWeek", weekPayload)
+    );
+  else if (top.type === "jointWeek") renderJointWeekDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "muscleFreshness") renderMuscleFreshnessDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "hrZone") renderZoneContributionDetail(body, top.payload.zone, top.payload.contributions);
   else if (top.type === "emphasis") {
