@@ -1402,7 +1402,10 @@ export function renderReadyToTrain(container, rows, onOpenExercise) {
               ? r.suggestions
                   .map(
                     (s) =>
-                      `<button type="button" class="ready-ex-chip" data-name="${esc(s.name)}">${esc(s.name)}${s.alsoHits.length ? ` <span class="ready-ex-also">+${s.alsoHits.length}</span>` : ""}</button>`
+                      `<button type="button" class="ready-ex-chip" data-name="${esc(s.name)}">
+                        <span class="ready-ex-name">${esc(s.name)}</span>
+                        ${s.alsoHits.length ? `<span class="ready-ex-also">also hits ${esc(s.alsoHits.join(", "))}</span>` : ""}
+                      </button>`
                   )
                   .join("")
               : `<span class="muted small">No library exercise targets this yet.</span>`
