@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260826a";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826a";
-import { renderBarList, renderProgressChart } from "./charts.js?v=20260826a";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826a";
+import { supabase } from "./supabaseClient.js?v=20260826b";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826b";
+import { renderBarList, renderProgressChart } from "./charts.js?v=20260826b";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826b";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -1293,15 +1293,17 @@ const READY_SUGGESTIONS_PER_MUSCLE = 3;
 const READY_MUSCLE_WEIGHT_MIN = 0.5; // "meaningfully works this muscle", same cutoff volume/movement credit already uses for a secondary mover
 const READY_ROLLING_DAYS = 7;
 
-// A joint counts as "currently rising" only when this period's load is
-// strictly more than the prior period's -- the same comparison Joint Load
-// itself already shows as "+N% vs prior period", not a new threshold.
-function risingJoints(jointLoad) {
-  if (!jointLoad) return new Set();
-  return new Set(JOINTS.map((j) => j.key).filter((k) => (jointLoad.current[k] || 0) > (jointLoad.prev[k] || 0)));
+// A joint counts as overloaded only when loadJointRisk()'s acute:chronic
+// ratio clears the same high-risk cutoff it's defined against -- NOT
+// merely "went up from last period" (see loadJointRisk's comment for why
+// that was the wrong signal: it's true almost every week under ordinary
+// progressive overload).
+function overloadedJoints(jointRisk) {
+  if (!jointRisk) return new Set();
+  return new Set(Object.entries(jointRisk).filter(([, ratio]) => ratio !== null && ratio > JOINT_RISK_RATIO_THRESHOLD).map(([key]) => key));
 }
 
-export async function loadReadyToTrain(jointLoad) {
+export async function loadReadyToTrain(jointRisk) {
   const now = new Date();
   // Same 365-day net as Muscle Freshness's farStart -- anything older reads
   // as "never" for either purpose, and it doubles as the window "have you
@@ -1371,7 +1373,7 @@ export async function loadReadyToTrain(jointLoad) {
 
   const topKeys = new Set(ranked.map((r) => r.key));
   const entries = getAllExerciseEntries();
-  const rising = risingJoints(jointLoad);
+  const overloaded = overloadedJoints(jointRisk);
 
   ranked.forEach((r) => {
     const candidates = entries
@@ -1382,14 +1384,15 @@ export async function loadReadyToTrain(jointLoad) {
           .map((k) => freshnessLabel(k));
         // Only the joints this exercise meaningfully loads (>= 0.3, roughly
         // "a real factor" rather than incidental stabilizer work) AND that
-        // are currently trending up -- surfaced as a caution, not hidden
-        // behind a combined score, and not raised at all for a joint
-        // that's flat or trending down.
-        const risingLoad = Object.entries(e.jointLoad || {})
-          .filter(([joint, load]) => load >= 0.3 && rising.has(joint))
+        // are currently overloaded (acute:chronic ratio past the high-risk
+        // cutoff, not merely "up from last period") -- surfaced as a
+        // caution, not hidden behind a combined score, and not raised at
+        // all for a joint that's just seeing ordinary progression.
+        const overloadedLoad = Object.entries(e.jointLoad || {})
+          .filter(([joint, load]) => load >= 0.3 && overloaded.has(joint))
           .map(([joint]) => JOINT_LABEL[joint] || joint);
-        const jointPenalty = Object.entries(e.jointLoad || {}).reduce((sum, [joint, load]) => sum + (rising.has(joint) ? load : 0), 0);
-        return { name: e.name, isLogged: loggedNames.has(e.name), weight: e.muscles[r.key], alsoHits, risingLoad, jointPenalty };
+        const jointPenalty = Object.entries(e.jointLoad || {}).reduce((sum, [joint, load]) => sum + (overloaded.has(joint) ? load : 0), 0);
+        return { name: e.name, isLogged: loggedNames.has(e.name), weight: e.muscles[r.key], alsoHits, overloadedLoad, jointPenalty };
       })
       // Muscle fit and "you've done this before" still decide the ranking
       // first -- rising joint load only breaks ties among candidates that
@@ -1424,10 +1427,10 @@ export function renderReadyToTrain(container, rows, onOpenExercise) {
               ? r.suggestions
                   .map(
                     (s) =>
-                      `<button type="button" class="ready-ex-chip${s.risingLoad.length ? " ready-ex-chip-caution" : ""}" data-name="${esc(s.name)}">
+                      `<button type="button" class="ready-ex-chip${s.overloadedLoad.length ? " ready-ex-chip-caution" : ""}" data-name="${esc(s.name)}">
                         <span class="ready-ex-name">${esc(s.name)}</span>
                         ${s.alsoHits.length ? `<span class="ready-ex-also">also hits ${esc(s.alsoHits.join(", "))}</span>` : ""}
-                        ${s.risingLoad.length ? `<span class="ready-ex-caution">⚠ loads ${esc(s.risingLoad.join(", "))} (rising)</span>` : ""}
+                        ${s.overloadedLoad.length ? `<span class="ready-ex-caution">⚠ loads ${esc(s.overloadedLoad.join(", "))} (overloaded)</span>` : ""}
                       </button>`
                   )
                   .join("")
@@ -1949,6 +1952,59 @@ export async function loadJointLoad() {
   const [current, prev] = await Promise.all([tallyJointLoadInWindow(periodStart, now, breakdown), tallyJointLoadInWindow(prevStart, periodStart)]);
   jointLoadContributionsCache = breakdown;
   return { current, prev };
+}
+
+// Which joints are genuinely overloaded right now, for Ready to Train's
+// caution flag -- deliberately NOT "current 3 weeks > prior 3 weeks"
+// (loadJointLoad's own comparison, still useful as raw context above, but
+// under any real progressive-overload program that's true almost every
+// week by design -- it would flag nearly everything, which is noise, not
+// signal). Reuses Muscle Freshness's exact acute:chronic framing instead
+// (same ACUTE_DAYS/CHRONIC_DAYS as MuscleFreshness above): last 10 days
+// vs. this joint's OWN trailing 70-day average. A ratio above ~1.5 is the
+// commonly-cited high-injury-risk zone for acute:chronic training-load
+// ratios (Gabbett, "The training-injury prevention paradox", 2016) -- an
+// established cutoff, not a number invented for this app -- so normal
+// week-to-week progression (ratio close to 1) stays quiet, and only a
+// real spike relative to your own recent normal gets flagged.
+const JOINT_RISK_RATIO_THRESHOLD = 1.5;
+
+export async function loadJointRisk() {
+  const now = new Date();
+  const chronicStart = new Date(now.getTime() - CHRONIC_DAYS * 24 * 60 * 60 * 1000);
+  const acuteStart = new Date(now.getTime() - ACUTE_DAYS * 24 * 60 * 60 * 1000);
+
+  const { data: workouts, error: wErr } = await supabase.from("fitlog_workouts").select("id, date").gte("date", chronicStart.toISOString());
+  if (wErr || !workouts?.length) return {};
+  const { data: sets, error: sErr } = await supabase
+    .from("fitlog_sets")
+    .select("workout_id, exercise_name, is_warmup")
+    .in(
+      "workout_id",
+      workouts.map((w) => w.id)
+    );
+  if (sErr) return {};
+  const dateByWorkout = new Map(workouts.map((w) => [w.id, new Date(w.date)]));
+
+  const acute = Object.fromEntries(JOINTS.map((j) => [j.key, 0]));
+  const chronic = Object.fromEntries(JOINTS.map((j) => [j.key, 0]));
+  (sets || []).forEach((s) => {
+    if (s.is_warmup) return;
+    const date = dateByWorkout.get(s.workout_id);
+    if (!date) return;
+    Object.entries(resolveExerciseMeta(s.exercise_name).jointLoad || {}).forEach(([joint, load]) => {
+      if (date >= chronicStart) chronic[joint] = (chronic[joint] || 0) + load;
+      if (date >= acuteStart) acute[joint] = (acute[joint] || 0) + load;
+    });
+  });
+
+  const risk = {};
+  JOINTS.forEach((j) => {
+    const chronicPer10Days = (chronic[j.key] || 0) / (CHRONIC_DAYS / ACUTE_DAYS);
+    const acuteVal = acute[j.key] || 0;
+    risk[j.key] = chronicPer10Days > 0 ? acuteVal / chronicPer10Days : acuteVal > 0 ? Infinity : null;
+  });
+  return risk;
 }
 
 function jointDeltaText(current, prev) {

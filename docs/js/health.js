@@ -5,8 +5,8 @@
 // min/max "range" gauge, but a single outlier day (e.g. one 29k-step day)
 // stretches a min/max scale enough to make the marker position meaningless
 // -- averages are naturally resistant to that, so this compares those instead.
-import { supabase } from "./supabaseClient.js?v=20260826a";
-import { renderBarList } from "./charts.js?v=20260826a";
+import { supabase } from "./supabaseClient.js?v=20260826b";
+import { renderBarList } from "./charts.js?v=20260826b";
 
 export const HEALTH_METRICS = {
   rhr: { label: "Resting Heart Rate", column: "resting_hr", unit: " bpm" },

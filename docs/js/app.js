@@ -1,7 +1,7 @@
-import { loadDashboard } from "./dashboard.js?v=20260826a";
-import { supabase } from "./supabaseClient.js?v=20260826a";
-import { importFitLogBackup } from "./importFitLog.js?v=20260826a";
-import { renderBarList, makeCollapsible } from "./charts.js?v=20260826a";
+import { loadDashboard } from "./dashboard.js?v=20260826b";
+import { supabase } from "./supabaseClient.js?v=20260826b";
+import { importFitLogBackup } from "./importFitLog.js?v=20260826b";
+import { renderBarList, makeCollapsible } from "./charts.js?v=20260826b";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -21,6 +21,7 @@ import {
   renderAthleticismDetail,
   renderCardioIntensityDetail,
   loadJointLoad,
+  loadJointRisk,
   renderJointLoad,
   loadMuscleFreshness,
   renderMuscleFreshness,
@@ -32,12 +33,12 @@ import {
   loadOtherTrainingZones,
   renderCardioZones,
   renderZoneContributionDetail,
-} from "./workouts.js?v=20260826a";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826a";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826a";
-import { renderMetricDetail } from "./health.js?v=20260826a";
-import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826a";
-import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826a";
+} from "./workouts.js?v=20260826b";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826b";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826b";
+import { renderMetricDetail } from "./health.js?v=20260826b";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826b";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826b";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -239,11 +240,14 @@ async function refreshWorkouts(days) {
 
   // Also not scoped to the range selector -- like Freshness, this is always
   // "as of right now" (last 365 days of history feeding "days since"), not
-  // a report on whatever window happens to be selected above. Passed the
-  // same jointLoad just computed so suggestions can softly favor exercises
-  // that don't add to a joint that's currently trending up -- a tiebreaker
-  // on top of the muscle-fit ranking, not a replacement for it.
-  const readyToTrain = await loadReadyToTrain(jointLoad);
+  // a report on whatever window happens to be selected above. jointRisk
+  // (NOT the 3-week jointLoad above -- see loadJointRisk's own comment for
+  // why "up from last period" is the wrong signal here) lets suggestions
+  // softly favor exercises that don't add to a joint that's genuinely
+  // overloaded -- a tiebreaker on top of the muscle-fit ranking, not a
+  // replacement for it.
+  const jointRisk = await loadJointRisk();
+  const readyToTrain = await loadReadyToTrain(jointRisk);
   renderReadyToTrain($("#readyToTrain"), readyToTrain, (name) => pushModal("exercise", name));
 
   const cardioZones = await loadCardioZones(start, end);
