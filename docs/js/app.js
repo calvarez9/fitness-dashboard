@@ -1,7 +1,7 @@
-import { loadDashboard } from "./dashboard.js?v=20260826c";
-import { supabase } from "./supabaseClient.js?v=20260826c";
-import { importFitLogBackup } from "./importFitLog.js?v=20260826c";
-import { renderBarList, makeCollapsible } from "./charts.js?v=20260826c";
+import { loadDashboard } from "./dashboard.js?v=20260826d";
+import { supabase } from "./supabaseClient.js?v=20260826d";
+import { importFitLogBackup } from "./importFitLog.js?v=20260826d";
+import { renderBarList, makeCollapsible } from "./charts.js?v=20260826d";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -22,6 +22,7 @@ import {
   renderCardioIntensityDetail,
   loadJointLoad,
   loadJointRisk,
+  loadJointLoadHistory,
   renderJointLoad,
   loadMuscleFreshness,
   renderMuscleFreshness,
@@ -33,12 +34,12 @@ import {
   loadOtherTrainingZones,
   renderCardioZones,
   renderZoneContributionDetail,
-} from "./workouts.js?v=20260826c";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826c";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826c";
-import { renderMetricDetail } from "./health.js?v=20260826c";
-import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826c";
-import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826c";
+} from "./workouts.js?v=20260826d";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826d";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826d";
+import { renderMetricDetail } from "./health.js?v=20260826d";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826d";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826d";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -231,6 +232,11 @@ async function refreshWorkouts(days) {
   // vs. the 3 weeks before that.
   const jointLoad = await loadJointLoad();
   renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
+  // Populates the cache renderJointDetail's trend chart reads from --
+  // fetched here (not on modal-open) so the click-through stays instant,
+  // same "load once, read from cache in the drill-down" pattern as the
+  // exercise-contribution cache above it.
+  await loadJointLoadHistory();
 
   // Deliberately not scoped to the range selector -- freshness is always
   // "as of right now" (last 10 days vs. trailing 70), same reasoning as

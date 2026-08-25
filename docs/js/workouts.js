@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260826c";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826c";
-import { renderBarList, renderProgressChart } from "./charts.js?v=20260826c";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826c";
+import { supabase } from "./supabaseClient.js?v=20260826d";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826d";
+import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260826d";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826d";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -2007,6 +2007,76 @@ export async function loadJointRisk() {
   return risk;
 }
 
+// ---------- Joint Load history: the trend behind the click-through ----------
+// The tiles and the acute:chronic ratio both collapse everything down to a
+// couple of numbers -- useful for "is this elevated right now", useless for
+// seeing WHY (one big week vs. a genuine steady climb). This is the same
+// data, just not collapsed: weekly totals over a longer window, so the
+// chart in the click-through can show the actual shape.
+const JOINT_HISTORY_WEEKS = 16;
+
+function startOfWeek(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - x.getDay());
+  return x;
+}
+
+// Populated by loadJointLoadHistory() -- jointKey -> [{x: Date, y: credited
+// load that week}], for renderJointDetail's chart. Same "compute once at
+// refresh, read from cache in the click-through" approach as everything
+// else in this section.
+let jointLoadHistoryCache = {};
+
+export async function loadJointLoadHistory() {
+  const now = new Date();
+  const start = new Date(now.getTime() - JOINT_HISTORY_WEEKS * 7 * 24 * 60 * 60 * 1000);
+
+  const { data: workouts, error: wErr } = await supabase.from("fitlog_workouts").select("id, date").gte("date", start.toISOString());
+  if (wErr || !workouts?.length) {
+    jointLoadHistoryCache = {};
+    return;
+  }
+  const { data: sets, error: sErr } = await supabase
+    .from("fitlog_sets")
+    .select("workout_id, exercise_name, is_warmup")
+    .in(
+      "workout_id",
+      workouts.map((w) => w.id)
+    );
+  if (sErr) {
+    jointLoadHistoryCache = {};
+    return;
+  }
+  const dateByWorkout = new Map(workouts.map((w) => [w.id, new Date(w.date)]));
+
+  // jointKey -> weekKey (ISO date string) -> total
+  const byJoint = Object.fromEntries(JOINTS.map((j) => [j.key, {}]));
+  (sets || []).forEach((s) => {
+    if (s.is_warmup) return;
+    const date = dateByWorkout.get(s.workout_id);
+    if (!date) return;
+    const wk = startOfWeek(date).toISOString().slice(0, 10);
+    Object.entries(resolveExerciseMeta(s.exercise_name).jointLoad || {}).forEach(([joint, load]) => {
+      if (!byJoint[joint]) return; // a joint outside JOINTS (shouldn't happen, but stay defensive)
+      byJoint[joint][wk] = (byJoint[joint][wk] || 0) + load;
+    });
+  });
+
+  // Every week in the window gets a point, even a silent one (y: 0) --
+  // otherwise a gap between two logged weeks would draw as a straight
+  // line climbing/falling through the empty weeks instead of the flat
+  // "nothing happened" it actually was.
+  const weekKeys = [];
+  for (let d = startOfWeek(start); d <= now; d.setDate(d.getDate() + 7)) {
+    weekKeys.push(new Date(d).toISOString().slice(0, 10));
+  }
+
+  jointLoadHistoryCache = Object.fromEntries(
+    JOINTS.map((j) => [j.key, weekKeys.map((wk) => ({ x: new Date(wk), y: round(byJoint[j.key][wk] || 0) }))])
+  );
+}
+
 function jointDeltaText(current, prev) {
   if (!current && !prev) return "no load logged";
   if (!prev) return "new this period";
@@ -2044,8 +2114,23 @@ export function renderJointDetail(container, jointKey, onOpenExercise) {
   container.innerHTML = "";
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>${esc(JOINT_LABEL[jointKey] || jointKey)} — last ${JOINT_LOAD_DAYS} days</h4>`;
+  header.innerHTML = `<h4>${esc(JOINT_LABEL[jointKey] || jointKey)}</h4>`;
   container.appendChild(header);
+
+  const chartWrap = document.createElement("div");
+  chartWrap.className = "chart-card";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "trend-svg");
+  svg.setAttribute("viewBox", "0 0 700 220");
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  chartWrap.appendChild(svg);
+  container.appendChild(chartWrap);
+  renderTrendChart(svg, jointLoadHistoryCache[jointKey] || [], { emptyMessage: "No history yet.", yUnit: "" });
+
+  const subhead = document.createElement("div");
+  subhead.className = "workout-detail-header";
+  subhead.innerHTML = `<h4>Contributing exercises — last ${JOINT_LOAD_DAYS} days</h4>`;
+  container.appendChild(subhead);
 
   const totals = jointLoadContributionsCache[jointKey] || new Map();
   const rows = [...totals.entries()]
