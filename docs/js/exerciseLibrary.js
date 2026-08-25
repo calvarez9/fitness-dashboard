@@ -196,6 +196,11 @@ const ATHLETICISM_EXERCISES = {
 // enough builtin equivalent to alias to. Added here rather than guessed
 // away so their sets still count toward movement/muscle stats.
 const EXTRA_EXERCISES = {
+  // A dynamic hip-mobility drill (cycling through internal/external
+  // rotation), not a loaded strength movement -- 0.5 across its stabilizers
+  // rather than 1.0 on any single one, and no jointLoad, since staying
+  // light on the joints is the entire point of doing it.
+  "90/90 Hip Flow": { movement: "isolation", muscles: { hipFlexors: 0.5, adductors: 0.5, abductors: 0.5 } },
   "1/2 Kneeling Adductor Rock Back": { movement: "isolation", muscles: { adductors: 1, abs: 0.5 } },
   "Ab Wheel": { movement: "core", muscles: { abs: 1, hipFlexors: 0.5, obliques: 0.5 } },
   "Back Extension": { movement: "hinge", muscles: { spinalErectors: 1, glutes: 0.5, hamstrings: 0.5 }, jointLoad: { lowBack: 0.5 } },
