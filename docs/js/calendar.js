@@ -1,6 +1,6 @@
 // ---------- Calendar: browse by day, see + open what happened ----------
-import { supabase } from "./supabaseClient.js?v=20260826g";
-import { renderWorkoutDetailData } from "./workouts.js?v=20260826g";
+import { supabase } from "./supabaseClient.js?v=20260826i";
+import { renderWorkoutDetailData, renderCardioZones } from "./workouts.js?v=20260826i";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -58,7 +58,9 @@ export async function loadMonth(monthDate) {
       .lte("date", end.toISOString()),
     supabase
       .from("garmin_activities")
-      .select("id, activity_name, activity_type, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories")
+      .select(
+        "id, activity_name, activity_type, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories, hr_zone_1_seconds, hr_zone_2_seconds, hr_zone_3_seconds, hr_zone_4_seconds, hr_zone_5_seconds"
+      )
       .gte("start_time", start.toISOString())
       .lte("start_time", end.toISOString()),
     supabase
@@ -206,6 +208,19 @@ export async function renderDayDetail(container, dateKey, events, dailyStats, on
       card.className = "exercise-block";
       card.innerHTML = `<div class="exercise-name">⌚ ${esc(title)}</div><div class="muted small">${esc(bits.filter(Boolean).join(" · "))}</div>`;
       container.appendChild(card);
+
+      // This card is otherwise a much shorter summary than the modal's
+      // (renderGarminActivityDetail/renderWorkoutDetailData both already
+      // show this) -- it was just never given the same zone breakdown,
+      // not a data gap, so a click-through wasn't the only way to see it.
+      const zones = [1, 2, 3, 4, 5].map((n) => ({ n, seconds: a[`hr_zone_${n}_seconds`] || 0 }));
+      if (zones.some((z) => z.seconds > 0)) {
+        const zoneWrap = document.createElement("div");
+        zoneWrap.className = "sleep-stages";
+        zoneWrap.style.marginTop = "6px";
+        container.appendChild(zoneWrap);
+        renderCardioZones(zoneWrap, zones);
+      }
       continue;
     }
 

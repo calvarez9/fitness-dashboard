@@ -1,7 +1,7 @@
-import { loadDashboard } from "./dashboard.js?v=20260826g";
-import { supabase } from "./supabaseClient.js?v=20260826g";
-import { importFitLogBackup } from "./importFitLog.js?v=20260826g";
-import { renderBarList, makeCollapsible } from "./charts.js?v=20260826g";
+import { loadDashboard } from "./dashboard.js?v=20260826i";
+import { supabase } from "./supabaseClient.js?v=20260826i";
+import { importFitLogBackup } from "./importFitLog.js?v=20260826i";
+import { renderBarList, makeCollapsible } from "./charts.js?v=20260826i";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -35,12 +35,12 @@ import {
   loadOtherTrainingZones,
   renderCardioZones,
   renderZoneContributionDetail,
-} from "./workouts.js?v=20260826g";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826g";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826g";
-import { renderMetricDetail } from "./health.js?v=20260826g";
-import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826g";
-import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826g";
+} from "./workouts.js?v=20260826i";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826i";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826i";
+import { renderMetricDetail } from "./health.js?v=20260826i";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826i";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826i";
 
 const $ = (sel) => document.querySelector(sel);
 
