@@ -1,6 +1,6 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
 import { supabase } from "./supabaseClient.js";
-import { resolveExerciseMeta, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js";
 import { renderBarList, renderProgressChart } from "./charts.js";
 import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js";
 
@@ -1273,6 +1273,147 @@ export function renderMuscleFreshnessDetail(container, key, onOpenWorkout) {
     `;
     row.addEventListener("click", () => onOpenWorkout(c.workoutId));
     list.appendChild(row);
+  });
+}
+
+// ---------- Ready to Train: which muscles have gone the longest untouched ----------
+// Deliberately a different question than Muscle Freshness above, not a
+// second cut at the same one: Freshness asks "is this muscle fatigued
+// relative to its own recent normal" (a recovery signal, only meaningful
+// once there's a baseline). This asks "how long has it actually been" --
+// plain neglect, which is exactly as meaningful on day one as day 100, and
+// treats a muscle you've NEVER logged as the most overdue case of all
+// rather than something with no data to show (a reasonable default: it's
+// been infinitely long). One honest number (days since last trained) to
+// rank on, no invented urgency score combining it with anything else --
+// trailing-7-day set count rides along on each row as context, not as a
+// second input to the ranking.
+const READY_TOP_N = 6;
+const READY_SUGGESTIONS_PER_MUSCLE = 3;
+const READY_MUSCLE_WEIGHT_MIN = 0.5; // "meaningfully works this muscle", same cutoff volume/movement credit already uses for a secondary mover
+const READY_ROLLING_DAYS = 7;
+
+export async function loadReadyToTrain() {
+  const now = new Date();
+  // Same 365-day net as Muscle Freshness's farStart -- anything older reads
+  // as "never" for either purpose, and it doubles as the window "have you
+  // ever logged this exercise" is judged over (a real all-time query would
+  // cost a lot more for a distinction that rarely matters in practice).
+  const farStart = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+  const rollingStart = new Date(now.getTime() - READY_ROLLING_DAYS * 24 * 60 * 60 * 1000);
+
+  const { data: workouts, error: wErr } = await supabase
+    .from("fitlog_workouts")
+    .select("id, date, type")
+    .gte("date", farStart.toISOString())
+    .neq("type", "cardio");
+  if (wErr) throw wErr;
+
+  const ids = (workouts || []).map((w) => w.id);
+  let sets = [];
+  if (ids.length) {
+    const { data, error } = await supabase.from("fitlog_sets").select("workout_id, exercise_name, is_warmup").in("workout_id", ids);
+    if (error) throw error;
+    sets = data || [];
+  }
+  const dateByWorkout = new Map((workouts || []).map((w) => [w.id, new Date(w.date)]));
+
+  const lastTrainedRaw = {};
+  const rollingRaw = {};
+  const loggedNames = new Set(); // canonical exercise names actually performed in the window
+
+  sets.forEach((s) => {
+    if (s.is_warmup) return;
+    const date = dateByWorkout.get(s.workout_id);
+    if (!date) return;
+    const meta = resolveExerciseMeta(s.exercise_name);
+    if (meta.matched) loggedNames.add(meta.canonicalName);
+    Object.entries(meta.muscles || {}).forEach(([muscle, frac]) => {
+      if (!lastTrainedRaw[muscle] || date > lastTrainedRaw[muscle]) lastTrainedRaw[muscle] = date;
+      if (date >= rollingStart) rollingRaw[muscle] = (rollingRaw[muscle] || 0) + frac;
+    });
+  });
+
+  const groupedKeys = new Set(MUSCLE_GROUPS.flatMap((g) => g.members));
+  const lastTrainedByKey = {};
+  MUSCLE_GROUPS.forEach((g) => {
+    const dates = g.members.map((k) => lastTrainedRaw[k]).filter(Boolean);
+    if (dates.length) lastTrainedByKey[g.key] = new Date(Math.max(...dates.map((d) => d.getTime())));
+  });
+  MUSCLES.forEach((m) => {
+    if (groupedKeys.has(m.key)) return;
+    if (lastTrainedRaw[m.key]) lastTrainedByKey[m.key] = lastTrainedRaw[m.key];
+  });
+  const rolling = collapseMuscleMap(rollingRaw);
+
+  const ranked = muscleFreshnessKeys()
+    .map((key) => {
+      const last = lastTrainedByKey[key];
+      const daysSince = last ? Math.floor((now - last) / (24 * 60 * 60 * 1000)) : null;
+      return { key, label: freshnessLabel(key), daysSince, rollingSets: rolling[key] || 0 };
+    })
+    // Never-trained (daysSince null) sorts first -- the most overdue case,
+    // not a gap in the data. Ties broken by less rolling volume first.
+    .sort((a, b) => {
+      const aVal = a.daysSince === null ? Infinity : a.daysSince;
+      const bVal = b.daysSince === null ? Infinity : b.daysSince;
+      return bVal - aVal || a.rollingSets - b.rollingSets;
+    })
+    .slice(0, READY_TOP_N);
+
+  const topKeys = new Set(ranked.map((r) => r.key));
+  const entries = getAllExerciseEntries();
+
+  ranked.forEach((r) => {
+    const candidates = entries
+      .filter((e) => (e.muscles[r.key] || 0) >= READY_MUSCLE_WEIGHT_MIN)
+      .map((e) => {
+        const alsoHits = [...topKeys]
+          .filter((k) => k !== r.key && (e.muscles[k] || 0) >= READY_MUSCLE_WEIGHT_MIN)
+          .map((k) => freshnessLabel(k));
+        return { name: e.name, isLogged: loggedNames.has(e.name), weight: e.muscles[r.key], alsoHits };
+      })
+      .sort((a, b) => Number(b.isLogged) - Number(a.isLogged) || b.weight - a.weight || a.name.localeCompare(b.name));
+    r.suggestions = candidates.slice(0, READY_SUGGESTIONS_PER_MUSCLE);
+  });
+
+  return ranked;
+}
+
+export function renderReadyToTrain(container, rows, onOpenExercise) {
+  if (!rows.length) {
+    container.innerHTML = `<p class="chart-empty">Not enough history yet.</p>`;
+    return;
+  }
+  const dayText = (d) => (d === null ? "Never logged" : d === 0 ? "Trained today" : d === 1 ? "1 day ago" : `${d} days ago`);
+  const setText = (n) => `${round(n)} set${round(n) === 1 ? "" : "s"} this week`;
+
+  container.innerHTML = rows
+    .map(
+      (r) => `
+      <div class="ready-row">
+        <div class="ready-row-top">
+          <span class="ready-label">${esc(r.label)}</span>
+          <span class="ready-meta">${esc(dayText(r.daysSince))} · ${esc(setText(r.rollingSets))}</span>
+        </div>
+        <div class="ready-suggestions">
+          ${
+            r.suggestions.length
+              ? r.suggestions
+                  .map(
+                    (s) =>
+                      `<button type="button" class="ready-ex-chip" data-name="${esc(s.name)}">${esc(s.name)}${s.alsoHits.length ? ` <span class="ready-ex-also">+${s.alsoHits.length}</span>` : ""}</button>`
+                  )
+                  .join("")
+              : `<span class="muted small">No library exercise targets this yet.</span>`
+          }
+        </div>
+      </div>`
+    )
+    .join("");
+
+  container.querySelectorAll("[data-name]").forEach((el) => {
+    el.addEventListener("click", () => onOpenExercise(el.dataset.name));
   });
 }
 

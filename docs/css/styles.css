@@ -337,6 +337,22 @@ main#content { padding: 16px 16px 60px; }
   .freshness-row-wrap { flex-direction: column; gap: 16px; }
 }
 
+/* ---------- Ready to Train: longest-neglected muscles + exercises for each ---------- */
+.ready-list { display: flex; flex-direction: column; }
+.ready-row { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.ready-row:last-child { border-bottom: none; }
+.ready-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ready-label { font-size: 13px; font-weight: 600; }
+.ready-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.ready-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ready-ex-chip {
+  font-family: var(--font); font-size: 12px; padding: 5px 10px;
+  border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-primary); cursor: pointer;
+}
+.ready-ex-chip:hover { background: var(--surface-3); }
+.ready-ex-also { color: var(--text-muted); font-size: 10px; }
+
 /* ---------- Bar list (exercise / movement / muscle stats) ---------- */
 .bar-list { display: flex; flex-direction: column; gap: 12px; }
 .bar-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }

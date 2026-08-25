@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260821zk" />
+<link rel="stylesheet" href="css/styles.css?v=20260821zl" />
 </head>
 <body>
 <div id="app">
@@ -155,6 +155,14 @@
           <div class="chart-card">
             <div id="muscleFreshness" class="freshness-row-wrap"></div>
             <p class="muted small">Last 10 days vs. each muscle's own trailing 70-day average — not a single score, just which muscles have had the least (or most) relative to their own usual.</p>
+          </div>
+        </section>
+
+        <section class="chart-section">
+          <h2>Ready to Train</h2>
+          <div class="chart-card">
+            <div id="readyToTrain" class="ready-list"></div>
+            <p class="muted small">Muscles you haven't trained in the longest, with a few library exercises that target each one — a neglect signal, separate from Freshness's recovery one.</p>
           </div>
         </section>
 
@@ -308,6 +316,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260821zk"></script>
+<script type="module" src="js/app.js?v=20260821zl"></script>
 </body>
 </html>

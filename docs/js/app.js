@@ -25,6 +25,8 @@ import {
   loadMuscleFreshness,
   renderMuscleFreshness,
   renderMuscleFreshnessDetail,
+  loadReadyToTrain,
+  renderReadyToTrain,
   renderJointDetail,
   loadCardioZones,
   loadOtherTrainingZones,
@@ -229,6 +231,12 @@ async function refreshWorkouts(days) {
   // All-Time PRs staying independent of the selected range.
   const freshness = await loadMuscleFreshness();
   renderMuscleFreshness($("#muscleFreshness"), freshness, (key) => pushModal("muscleFreshness", key));
+
+  // Also not scoped to the range selector -- like Freshness, this is always
+  // "as of right now" (last 365 days of history feeding "days since"), not
+  // a report on whatever window happens to be selected above.
+  const readyToTrain = await loadReadyToTrain();
+  renderReadyToTrain($("#readyToTrain"), readyToTrain, (name) => pushModal("exercise", name));
 
   const cardioZones = await loadCardioZones(start, end);
   renderCardioZones($("#cardioZones"), cardioZones, "No cardio activity in range yet.", (zone, contributions) =>
