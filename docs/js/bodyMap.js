@@ -5,8 +5,8 @@
 // js/volume.js output — some slugs (e.g. a single "deltoids" blob) stand in
 // for more than one tracked muscle; some (hands, head, knees…) are just
 // body context and never colored.
-import { bodyFront, bodyFrontOutline } from "./vendor/bodyFront.js?v=20260826e";
-import { bodyBack, bodyBackOutline } from "./vendor/bodyBack.js?v=20260826e";
+import { bodyFront, bodyFrontOutline } from "./vendor/bodyFront.js?v=20260826g";
+import { bodyBack, bodyBackOutline } from "./vendor/bodyBack.js?v=20260826g";
 
 const FRONT_VIEWBOX = "0 0 724 1448";
 const BACK_VIEWBOX = "724 0 724 1448";

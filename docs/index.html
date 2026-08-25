@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260826e" />
+<link rel="stylesheet" href="css/styles.css?v=20260826g" />
 </head>
 <body>
 <div id="app">
@@ -314,8 +314,14 @@
 
   <div id="toast" class="toast" hidden></div>
 
+  <div id="updateBanner" class="update-banner" hidden>
+    <span>A new version of the dashboard is available.</span>
+    <button type="button" id="updateBannerReload" class="btn primary small">Reload</button>
+    <button type="button" id="updateBannerDismiss" class="icon-btn small" aria-label="Dismiss">✕</button>
+  </div>
+
 </div>
 
-<script type="module" src="js/app.js?v=20260826e"></script>
+<script type="module" src="js/app.js?v=20260826g"></script>
 </body>
 </html>

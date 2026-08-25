@@ -1,7 +1,7 @@
-import { loadDashboard } from "./dashboard.js?v=20260826e";
-import { supabase } from "./supabaseClient.js?v=20260826e";
-import { importFitLogBackup } from "./importFitLog.js?v=20260826e";
-import { renderBarList, makeCollapsible } from "./charts.js?v=20260826e";
+import { loadDashboard } from "./dashboard.js?v=20260826g";
+import { supabase } from "./supabaseClient.js?v=20260826g";
+import { importFitLogBackup } from "./importFitLog.js?v=20260826g";
+import { renderBarList, makeCollapsible } from "./charts.js?v=20260826g";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -35,12 +35,12 @@ import {
   loadOtherTrainingZones,
   renderCardioZones,
   renderZoneContributionDetail,
-} from "./workouts.js?v=20260826e";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826e";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826e";
-import { renderMetricDetail } from "./health.js?v=20260826e";
-import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826e";
-import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826e";
+} from "./workouts.js?v=20260826g";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260826g";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826g";
+import { renderMetricDetail } from "./health.js?v=20260826g";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260826g";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260826g";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -567,8 +567,54 @@ function initDashboardUI() {
   refresh();
 }
 
+// ---------- Update checker ----------
+// No service worker here (that's FitLog's pattern) -- this is a plain
+// SPA, so once a tab is open it just keeps running whatever JS it loaded
+// at the time, no matter how many deploys happen after that, with nothing
+// ever saying so. Compares this page's own script-tag version against
+// whatever index.html currently serves. Offers a reload rather than
+// forcing one -- an inline workout edit could be open, so this asks
+// instead of yanking the page out from under it.
+function currentAppVersion() {
+  const src = document.querySelector('script[src*="app.js"]')?.src || "";
+  return new URL(src, location.href).searchParams.get("v");
+}
+
+async function checkForUpdate() {
+  try {
+    const res = await fetch(`index.html?_=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return;
+    const html = await res.text();
+    const match = html.match(/app\.js\?v=([A-Za-z0-9]+)/);
+    const latest = match && match[1];
+    const current = currentAppVersion();
+    if (latest && current && latest !== current) {
+      $("#updateBanner").hidden = false;
+    }
+  } catch (e) {
+    // Offline, or the fetch was blocked -- not worth surfacing; the next
+    // scheduled check will just try again.
+  }
+}
+
+function initUpdateChecker() {
+  $("#updateBannerReload").addEventListener("click", () => window.location.reload());
+  $("#updateBannerDismiss").addEventListener("click", () => { $("#updateBanner").hidden = true; });
+
+  // On load (catches "this tab was already stale before it was even
+  // opened" -- unlikely but free to check), on every return to the tab
+  // (the common case: left open, deploy happened while away), and on a
+  // slow timer in case it's left open and focused for a long stretch.
+  checkForUpdate();
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) checkForUpdate();
+  });
+  setInterval(checkForUpdate, 5 * 60 * 1000);
+}
+
 // No login gate -- an explicit, informed choice (see schema/012), not an
 // oversight. Supabase is queried as the anon role from here on; the RLS
 // policies/grants in that migration are what make anon's requests
 // actually succeed instead of hitting permission errors everywhere.
 initDashboardUI();
+initUpdateChecker();

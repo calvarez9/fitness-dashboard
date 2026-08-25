@@ -391,4 +391,20 @@ main#content { padding: 16px 16px 60px; }
   border-radius: 999px; font-size: 13px; z-index: 60; box-shadow: 0 6px 18px rgba(0,0,0,0.2);
 }
 
+/* Deliberately persistent (no auto-hide, unlike .toast) -- this app has
+   no service worker to self-heal a stale tab the way FitLog now does, so
+   a plain SPA left open across a deploy just keeps running old JS
+   forever with nothing to say so. Doesn't auto-reload either: an inline
+   workout edit could be open, so this asks rather than yanking the page
+   out from under it. */
+.update-banner {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--surface-1); border-top: 1px solid var(--border);
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  font-size: 13px; color: var(--text-primary); z-index: 60;
+  box-shadow: 0 -4px 14px rgba(0,0,0,0.08);
+}
+.update-banner span { flex: 1; min-width: 160px; }
+
 [hidden] { display: none !important; }
