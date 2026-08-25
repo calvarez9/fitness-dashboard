@@ -223,7 +223,12 @@ async function refreshWorkouts(days) {
   const emphasis = await loadTrainingEmphasis(start, end);
   renderTrainingEmphasis($("#trainingEmphasis"), emphasis, (kind) => pushModal("emphasis", kind));
 
-  const jointLoad = await loadJointLoad(start, end);
+  // Deliberately not scoped to the range selector (days) -- like Freshness
+  // and Ready to Train below, "is this joint currently loaded" is a
+  // standing question, not one that should change shape because someone
+  // has "Last 7 days" selected for an unrelated chart. Fixed at 3 weeks
+  // vs. the 3 weeks before that.
+  const jointLoad = await loadJointLoad();
   renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
 
   // Deliberately not scoped to the range selector -- freshness is always
@@ -234,8 +239,11 @@ async function refreshWorkouts(days) {
 
   // Also not scoped to the range selector -- like Freshness, this is always
   // "as of right now" (last 365 days of history feeding "days since"), not
-  // a report on whatever window happens to be selected above.
-  const readyToTrain = await loadReadyToTrain();
+  // a report on whatever window happens to be selected above. Passed the
+  // same jointLoad just computed so suggestions can softly favor exercises
+  // that don't add to a joint that's currently trending up -- a tiebreaker
+  // on top of the muscle-fit ranking, not a replacement for it.
+  const readyToTrain = await loadReadyToTrain(jointLoad);
   renderReadyToTrain($("#readyToTrain"), readyToTrain, (name) => pushModal("exercise", name));
 
   const cardioZones = await loadCardioZones(start, end);

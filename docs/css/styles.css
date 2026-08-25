@@ -353,8 +353,10 @@ main#content { padding: 16px 16px 60px; }
   text-align: left; max-width: 100%;
 }
 .ready-ex-chip:hover { background: var(--surface-3); }
+.ready-ex-chip-caution { border-color: var(--warning); }
 .ready-ex-name { font-weight: 600; }
 .ready-ex-also { color: var(--text-muted); font-size: 10.5px; }
+.ready-ex-caution { color: var(--warning); font-size: 10.5px; font-weight: 600; }
 
 /* ---------- Bar list (exercise / movement / muscle stats) ---------- */
 .bar-list { display: flex; flex-direction: column; gap: 12px; }

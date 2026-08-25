@@ -1293,7 +1293,15 @@ const READY_SUGGESTIONS_PER_MUSCLE = 3;
 const READY_MUSCLE_WEIGHT_MIN = 0.5; // "meaningfully works this muscle", same cutoff volume/movement credit already uses for a secondary mover
 const READY_ROLLING_DAYS = 7;
 
-export async function loadReadyToTrain() {
+// A joint counts as "currently rising" only when this period's load is
+// strictly more than the prior period's -- the same comparison Joint Load
+// itself already shows as "+N% vs prior period", not a new threshold.
+function risingJoints(jointLoad) {
+  if (!jointLoad) return new Set();
+  return new Set(JOINTS.map((j) => j.key).filter((k) => (jointLoad.current[k] || 0) > (jointLoad.prev[k] || 0)));
+}
+
+export async function loadReadyToTrain(jointLoad) {
   const now = new Date();
   // Same 365-day net as Muscle Freshness's farStart -- anything older reads
   // as "never" for either purpose, and it doubles as the window "have you
@@ -1363,6 +1371,7 @@ export async function loadReadyToTrain() {
 
   const topKeys = new Set(ranked.map((r) => r.key));
   const entries = getAllExerciseEntries();
+  const rising = risingJoints(jointLoad);
 
   ranked.forEach((r) => {
     const candidates = entries
@@ -1371,9 +1380,22 @@ export async function loadReadyToTrain() {
         const alsoHits = [...topKeys]
           .filter((k) => k !== r.key && (e.muscles[k] || 0) >= READY_MUSCLE_WEIGHT_MIN)
           .map((k) => freshnessLabel(k));
-        return { name: e.name, isLogged: loggedNames.has(e.name), weight: e.muscles[r.key], alsoHits };
+        // Only the joints this exercise meaningfully loads (>= 0.3, roughly
+        // "a real factor" rather than incidental stabilizer work) AND that
+        // are currently trending up -- surfaced as a caution, not hidden
+        // behind a combined score, and not raised at all for a joint
+        // that's flat or trending down.
+        const risingLoad = Object.entries(e.jointLoad || {})
+          .filter(([joint, load]) => load >= 0.3 && rising.has(joint))
+          .map(([joint]) => JOINT_LABEL[joint] || joint);
+        const jointPenalty = Object.entries(e.jointLoad || {}).reduce((sum, [joint, load]) => sum + (rising.has(joint) ? load : 0), 0);
+        return { name: e.name, isLogged: loggedNames.has(e.name), weight: e.muscles[r.key], alsoHits, risingLoad, jointPenalty };
       })
-      .sort((a, b) => Number(b.isLogged) - Number(a.isLogged) || b.weight - a.weight || a.name.localeCompare(b.name));
+      // Muscle fit and "you've done this before" still decide the ranking
+      // first -- rising joint load only breaks ties among candidates that
+      // are otherwise equally good picks, never bumps a better match down
+      // for a worse one just to dodge a joint.
+      .sort((a, b) => Number(b.isLogged) - Number(a.isLogged) || b.weight - a.weight || a.jointPenalty - b.jointPenalty || a.name.localeCompare(b.name));
     r.suggestions = candidates.slice(0, READY_SUGGESTIONS_PER_MUSCLE);
   });
 
@@ -1402,9 +1424,10 @@ export function renderReadyToTrain(container, rows, onOpenExercise) {
               ? r.suggestions
                   .map(
                     (s) =>
-                      `<button type="button" class="ready-ex-chip" data-name="${esc(s.name)}">
+                      `<button type="button" class="ready-ex-chip${s.risingLoad.length ? " ready-ex-chip-caution" : ""}" data-name="${esc(s.name)}">
                         <span class="ready-ex-name">${esc(s.name)}</span>
                         ${s.alsoHits.length ? `<span class="ready-ex-also">also hits ${esc(s.alsoHits.join(", "))}</span>` : ""}
+                        ${s.risingLoad.length ? `<span class="ready-ex-caution">⚠ loads ${esc(s.risingLoad.join(", "))} (rising)</span>` : ""}
                       </button>`
                   )
                   .join("")
@@ -1872,53 +1895,59 @@ export function renderZoneContributionDetail(container, zoneNumber, contribution
 // ---------- Joint Load: Low Back / Knees / Shoulders ----------
 // A fatigue-management signal, not a volume metric -- each set contributes
 // (set count x that exercise's jointLoad weight for the joint), same
-// modeling approach as muscle/movement volume. Shown as selected-range vs
-// the immediately preceding period of equal length, same "current vs
-// prior" comparison already used for the health metrics.
-function tallyJointLoad(setsByWorkout) {
+// modeling approach as muscle/movement volume.
+
+// Deliberately NOT scoped to the dashboard's range selector (7/30/90/...) --
+// same reasoning as Muscle Freshness and Ready to Train just above/below.
+// "Should I train this joint today" is a standing question, not one that
+// should change shape because someone happened to have "Last 7 days"
+// selected while checking something unrelated. Fixed at 3 weeks vs the 3
+// weeks before that -- long enough to smooth over a single sparse week of
+// Boostcamp-imported history, short enough to still read as "lately."
+const JOINT_LOAD_DAYS = 21;
+
+// Populated by loadJointLoad() for the CURRENT period only (not the prior
+// one, which exists only to compute the delta) -- jointKey -> [{name,
+// credit}], for the click-through detail. Same "cache what's already
+// loaded for the drill-down" approach as Freshness's contribution cache.
+let jointLoadContributionsCache = {};
+
+// breakdownByJoint, when passed, also accumulates joint -> exerciseName ->
+// credit for the click-through -- only meaningful for the current period.
+async function tallyJointLoadInWindow(start, end, breakdownByJoint) {
   const totals = Object.fromEntries(JOINTS.map((j) => [j.key, 0]));
-  for (const sets of setsByWorkout.values()) {
-    sets.forEach((s) => {
-      if (s.is_warmup) return;
-      Object.entries(resolveExerciseMeta(s.exercise_name).jointLoad || {}).forEach(([joint, load]) => {
-        totals[joint] = (totals[joint] || 0) + load;
-      });
+  const { data: workouts, error: wErr } = await supabase.from("fitlog_workouts").select("id").gte("date", start.toISOString()).lt("date", end.toISOString());
+  if (wErr || !workouts?.length) return totals;
+  const { data: sets, error: sErr } = await supabase
+    .from("fitlog_sets")
+    .select("exercise_name, is_warmup")
+    .in(
+      "workout_id",
+      workouts.map((w) => w.id)
+    );
+  if (sErr) return totals;
+  (sets || []).forEach((s) => {
+    if (s.is_warmup) return;
+    Object.entries(resolveExerciseMeta(s.exercise_name).jointLoad || {}).forEach(([joint, load]) => {
+      totals[joint] = (totals[joint] || 0) + load;
+      if (breakdownByJoint) {
+        if (!breakdownByJoint[joint]) breakdownByJoint[joint] = new Map();
+        const m = breakdownByJoint[joint];
+        m.set(s.exercise_name, (m.get(s.exercise_name) || 0) + load);
+      }
     });
-  }
+  });
   return totals;
 }
 
-export async function loadJointLoad(start, end) {
-  const current = tallyJointLoad(cache.setsByWorkout);
+export async function loadJointLoad() {
+  const now = new Date();
+  const periodStart = new Date(now.getTime() - JOINT_LOAD_DAYS * 24 * 60 * 60 * 1000);
+  const prevStart = new Date(periodStart.getTime() - JOINT_LOAD_DAYS * 24 * 60 * 60 * 1000);
 
-  const rangeMs = end.getTime() - start.getTime();
-  const prevStart = new Date(start.getTime() - rangeMs);
-  const prevEnd = new Date(start.getTime());
-  const prev = Object.fromEntries(JOINTS.map((j) => [j.key, 0]));
-
-  const { data: prevWorkouts, error: wErr } = await supabase
-    .from("fitlog_workouts")
-    .select("id")
-    .gte("date", prevStart.toISOString())
-    .lt("date", prevEnd.toISOString());
-  if (!wErr && prevWorkouts?.length) {
-    const { data: prevSets, error: sErr } = await supabase
-      .from("fitlog_sets")
-      .select("exercise_name, is_warmup")
-      .in(
-        "workout_id",
-        prevWorkouts.map((w) => w.id)
-      );
-    if (!sErr) {
-      (prevSets || []).forEach((s) => {
-        if (s.is_warmup) return;
-        Object.entries(resolveExerciseMeta(s.exercise_name).jointLoad || {}).forEach(([joint, load]) => {
-          prev[joint] = (prev[joint] || 0) + load;
-        });
-      });
-    }
-  }
-
+  const breakdown = {};
+  const [current, prev] = await Promise.all([tallyJointLoadInWindow(periodStart, now, breakdown), tallyJointLoadInWindow(prevStart, periodStart)]);
+  jointLoadContributionsCache = breakdown;
   return { current, prev };
 }
 
@@ -1942,7 +1971,7 @@ export function renderJointLoad(container, { current, prev }, onOpenJoint) {
         </button>`;
       }).join("")}
     </div>
-    <p class="muted small">Sets in the selected range weighted by how much each exercise loads that joint, compared to the same-length period right before it -- a fatigue signal, not a score to chase. Tap a joint to see what's contributing.</p>
+    <p class="muted small">Last ${JOINT_LOAD_DAYS} days, weighted by how much each exercise loads that joint, compared to the ${JOINT_LOAD_DAYS} days before that -- a fatigue signal, not a score to chase, and independent of the range selector above. Tap a joint to see what's contributing.</p>
   `;
   if (onOpenJoint) {
     container.querySelectorAll("[data-joint]").forEach((btn) => {
@@ -1951,31 +1980,23 @@ export function renderJointLoad(container, { current, prev }, onOpenJoint) {
   }
 }
 
-// Which exercises (in the currently-loaded range) are contributing to one
-// joint's load, and how much -- same "contribution breakdown" pattern as
-// renderMovementDetail/renderMuscleDetail above.
+// Which exercises (in Joint Load's fixed 3-week window) are contributing
+// to one joint's load, and how much -- reads straight from the cache
+// loadJointLoad() already populated, same "reuse what's already loaded"
+// approach as Muscle Freshness's drill-down.
 export function renderJointDetail(container, jointKey, onOpenExercise) {
   container.innerHTML = "";
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>${esc(JOINT_LABEL[jointKey] || jointKey)}</h4>`;
+  header.innerHTML = `<h4>${esc(JOINT_LABEL[jointKey] || jointKey)} — last ${JOINT_LOAD_DAYS} days</h4>`;
   container.appendChild(header);
 
-  const totals = new Map(); // exercise_name -> joint-load-weighted credited sets
-  for (const sets of cache.setsByWorkout.values()) {
-    sets.forEach((s) => {
-      if (s.is_warmup) return;
-      const load = resolveExerciseMeta(s.exercise_name).jointLoad?.[jointKey];
-      if (!load) return;
-      totals.set(s.exercise_name, (totals.get(s.exercise_name) || 0) + load);
-    });
-  }
-
+  const totals = jointLoadContributionsCache[jointKey] || new Map();
   const rows = [...totals.entries()]
     .map(([name, credit]) => ({ label: name, value: round(credit) }))
     .sort((a, b) => b.value - a.value);
   if (!rows.length) {
-    container.appendChild(emptyNote("No exercises in range."));
+    container.appendChild(emptyNote("No exercises in this window."));
     return;
   }
 
