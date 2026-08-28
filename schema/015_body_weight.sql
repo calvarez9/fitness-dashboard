@@ -1,0 +1,12 @@
+-- ============================================================
+-- Body weight, from Garmin's weight tracking (get_body_composition in
+-- sync/garmin_sync.py). One value per day, same "add it to the existing
+-- daily row" shape as every other Garmin daily metric here -- no new
+-- table, no new grants needed (table-level grants on garmin_daily_stats
+-- already cover this column).
+--
+-- Stored in kilograms (Garmin's own internal unit); the dashboard
+-- converts to lb for display, same as it does for distance (meters ->
+-- miles) elsewhere.
+-- ============================================================
+alter table garmin_daily_stats add column if not exists weight_kg numeric;

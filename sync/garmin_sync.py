@@ -121,6 +121,7 @@ def sync_day(garmin, date_str):
     sleep = safe("sleep", lambda: garmin.get_sleep_data(date_str)) or {}
     hrv = safe("hrv", lambda: garmin.get_hrv_data(date_str)) or {}
     bb = safe("body_battery", lambda: garmin.get_body_battery(date_str, date_str)) or []
+    body_comp = safe("body_comp", lambda: garmin.get_body_composition(date_str)) or {}
 
     # NOTE: Garmin's internal API field names are undocumented and can
     # differ slightly by account/device. These are best-effort mappings —
@@ -159,6 +160,17 @@ def sync_day(garmin, date_str):
     row["avg_hrv"] = (hrv.get("hrvSummary") or {}).get("lastNightAvg") if isinstance(hrv, dict) else None
 
     row["respiration_avg"] = stats.get("avgWakingRespirationValue")
+
+    # get_body_composition's shape for a single date, per the library's own
+    # examples, nests the day's weigh-in(s) under totalAverage — Garmin
+    # stores weight in grams internally. Same "best-effort, corrected once
+    # real output is seen" caveat as everything else here: if this comes
+    # back null after a real sync, check raw["body_comp"] on that row for
+    # the actual key names and fix the mapping here, nothing downstream
+    # needs to change.
+    weight_grams = (body_comp.get("totalAverage") or {}).get("weight") if isinstance(body_comp, dict) else None
+    row["weight_kg"] = round(weight_grams / 1000, 2) if weight_grams else None
+
     row["raw"] = raw
     return row
 

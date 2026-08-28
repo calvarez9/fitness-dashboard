@@ -1,8 +1,9 @@
-import { supabase } from "./supabaseClient.js?v=20260826i";
-import { renderTrendChart } from "./charts.js?v=20260826i";
+import { supabase } from "./supabaseClient.js?v=20260826k";
+import { renderTrendChart } from "./charts.js?v=20260826k";
 
 const $ = (sel) => document.querySelector(sel);
 const MI_PER_METER = 0.000621371;
+const LB_PER_KG = 2.20462;
 
 function isoDate(d) {
   return d.toISOString().slice(0, 10);
@@ -102,6 +103,22 @@ export async function loadDashboard(days) {
 
   const daily = dailyRes.data || [];
   const activities = activitiesRes.data || [];
+
+  // Queried separately from the main daily-stats fetch above, and never
+  // allowed to throw -- weight_kg is a new column (schema/015) that may
+  // not exist in this Supabase project yet if that migration hasn't been
+  // run. Bundling it into the main select would take the whole Health tab
+  // down over one missing column; this way a missing/failed weight fetch
+  // only means an empty weight chart.
+  let weightByDate = new Map();
+  try {
+    const { data, error } = await supabase.from("garmin_daily_stats").select("date, weight_kg").gte("date", startISO).lte("date", endISO);
+    if (error) throw error;
+    weightByDate = new Map((data || []).map((d) => [d.date, d.weight_kg]));
+  } catch (e) {
+    console.warn("weight_kg unavailable (has schema/015_body_weight.sql been run?):", e.message);
+  }
+
   // A Garmin-auto-detected "Strength" activity isn't cardio -- excluded
   // from cardio-specific stats/charts below, but `activities` itself stays
   // unfiltered for the consistency heatmap, which cares about "did
@@ -161,6 +178,15 @@ export async function loadDashboard(days) {
     { emptyMessage: "No sleep data yet." }
   );
   renderSleepStages(daily);
+
+  renderTrendChart(
+    $("#chartWeight"),
+    daily.map((d) => {
+      const kg = weightByDate.get(d.date);
+      return { x: new Date(d.date), y: kg != null ? +(kg * LB_PER_KG).toFixed(1) : null };
+    }),
+    { emptyMessage: "No weigh-ins yet — weigh in on the Garmin scale and it'll show up after the next sync." }
+  );
 
   // Strength volume: working sets per week
   const weeklySets = {};
