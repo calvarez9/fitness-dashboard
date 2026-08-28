@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260826k";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826k";
-import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260826k";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826k";
+import { supabase } from "./supabaseClient.js?v=20260826l";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826l";
+import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260826l";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826l";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -1055,21 +1055,37 @@ function round(n) {
   return Math.round(n * 2) / 2;
 }
 
-// ---------- Muscle Freshness: which muscles are ready to be trained ----------
-// Same "no invented composite score" reasoning as everything else here --
-// two honest, self-calibrating signals per muscle instead of one black-box
-// "fatigue" number:
-//   - days since last trained
-//   - recent (last 10 days) credited sets vs. that muscle's OWN trailing
-//     70-day average, expressed as a ratio -- same acute:chronic framing
-//     sports science already uses for training load, not something we
-//     invented. A hardcoded "20 sets is a lot" would be meaningless across
-//     muscles with very different normal volumes; comparing each muscle to
-//     its own baseline isn't.
+// ---------- Muscle Freshness: recovery since it was last trained ----------
+// A real decay curve, not a fixed-window comparison: each muscle's percent
+// recovered climbs from 0% right when its last session ends toward 100% as
+// days pass, crossing 50% at exactly one half-life -- and that half-life is
+// muscle-specific, because a set of curls and a set of squats do not cost
+// the same recovery time. The tiers below are a best-effort categorization
+// from common, widely-taught big-vs-small-muscle recovery guidance (large,
+// compound-effort muscle groups taking longer than small, frequently-hit
+// ones) -- not a precisely cited constant per muscle the way the
+// acute:chronic ratio's 1.5 threshold below is. Edit these if your own
+// recovery clearly runs faster or slower than a tier suggests.
+//
+// recovery% = 100 * (1 - 0.5^(daysSinceLastTrained / halfLifeDays))
+//
 // Deliberately reported only at the MUSCLE_GROUPS level (e.g. "Traps" as a
 // whole) even though upper/middle/lower traps are tracked separately for
-// Muscle Volume -- freshness is about "should I train this today", and
-// that's a whole-muscle question, not a sub-region one.
+// Muscle Volume -- this is a "should I train this today" question, not a
+// sub-region one.
+const RECOVERY_HALF_LIFE_DAYS = {
+  // Fast (~24h) -- small, frequently-trained muscles
+  frontDelts: 1, middleDelts: 1, rearDelts: 1, biceps: 1, triceps: 1, forearms: 1, calves: 1, abs: 1, obliques: 1,
+  // Medium (~48h)
+  chest: 2, lats: 2, upperBack: 2, traps: 2, hipFlexors: 2, adductors: 2, abductors: 2,
+  // Slow (~72h) -- large, compound-effort muscle groups
+  quadriceps: 3, hamstrings: 3, glutes: 3, spinalErectors: 3, lowerBack: 3,
+};
+const DEFAULT_HALF_LIFE_DAYS = 2;
+
+// Still used by loadJointRisk() below -- its acute:chronic ratio is a
+// separate, deliberately-not-decay-based signal (a training-load spike
+// detector, not a recovery estimate) and keeps its own reasoning there.
 const ACUTE_DAYS = 10;
 const CHRONIC_DAYS = 70;
 
@@ -1081,14 +1097,6 @@ function muscleFreshnessKeys() {
 function freshnessLabel(key) {
   const group = MUSCLE_GROUPS.find((g) => g.key === key);
   return group ? group.label : MUSCLE_LABEL[key] || key;
-}
-
-// Raw muscle key (upperTraps, chest, ...) -> the key it's reported under in
-// Muscle Freshness (traps, chest, ...) -- itself, unless it's a member of
-// one of the MUSCLE_GROUPS.
-function groupKeyFor(muscleKey) {
-  const group = MUSCLE_GROUPS.find((g) => g.members.includes(muscleKey));
-  return group ? group.key : muscleKey;
 }
 
 // Populated by loadMuscleFreshness(): groupKey -> [{workoutId, date, name,
@@ -1116,11 +1124,9 @@ function collapseMuscleMap(rawTotals) {
 
 export async function loadMuscleFreshness() {
   const now = new Date();
-  const chronicStart = new Date(now.getTime() - CHRONIC_DAYS * 24 * 60 * 60 * 1000);
-  const acuteStart = new Date(now.getTime() - ACUTE_DAYS * 24 * 60 * 60 * 1000);
-  // "Last trained" can be older than the chronic window (e.g. a muscle you
-  // haven't touched in 4 months) -- pulled from a wider net so that still
-  // reads as a real date instead of just "no data".
+  // "Last trained" can be a while back (e.g. a muscle you haven't touched
+  // in 4 months) -- pulled from a wide net so that still reads as a real
+  // date instead of just "no data".
   const farStart = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
 
   const { data: workouts, error: wErr } = await supabase
@@ -1139,42 +1145,22 @@ export async function loadMuscleFreshness() {
   }
   const workoutById = Object.fromEntries((workouts || []).map((w) => [w.id, { date: new Date(w.date), name: w.name }]));
 
-  const acuteRaw = {};
-  const chronicRaw = {};
+  // Raw (ungrouped) muscle key -> last-trained Date, and every credited set
+  // that touched it, so the last-trained DAY's contributions can be pulled
+  // back out afterward once each group's own last-trained date is known.
   const lastTrainedRaw = {};
-  // Which workouts fed each muscle GROUP's acute (last-10-days) number --
-  // for the click-through, "what did I do" for that muscle. Keyed by group
-  // key directly (not by raw sub-muscle then merged after), so a workout
-  // that hit e.g. both upper and middle traps shows up as one combined row
-  // instead of two.
-  const acuteContribByGroup = {};
+  const setsByRawMuscle = {};
   sets.forEach((s) => {
     if (s.is_warmup) return;
     const w = workoutById[s.workout_id];
     if (!w) return;
-    const { date } = w;
     const meta = resolveExerciseMeta(s.exercise_name);
     Object.entries(meta.muscles || {}).forEach(([muscle, frac]) => {
-      if (date >= chronicStart) chronicRaw[muscle] = (chronicRaw[muscle] || 0) + frac;
-      if (!lastTrainedRaw[muscle] || date > lastTrainedRaw[muscle]) lastTrainedRaw[muscle] = date;
-      if (date >= acuteStart) {
-        acuteRaw[muscle] = (acuteRaw[muscle] || 0) + frac;
-        const groupKey = groupKeyFor(muscle);
-        if (!acuteContribByGroup[groupKey]) acuteContribByGroup[groupKey] = new Map();
-        const byWorkout = acuteContribByGroup[groupKey];
-        if (!byWorkout.has(s.workout_id)) byWorkout.set(s.workout_id, { workoutId: s.workout_id, date, name: w.name, credit: 0 });
-        byWorkout.get(s.workout_id).credit += frac;
-      }
+      if (!lastTrainedRaw[muscle] || w.date > lastTrainedRaw[muscle]) lastTrainedRaw[muscle] = w.date;
+      (setsByRawMuscle[muscle] ??= []).push({ date: w.date, workoutId: s.workout_id, name: w.name, credit: frac });
     });
   });
 
-  freshnessContributionsCache = {};
-  Object.entries(acuteContribByGroup).forEach(([key, byWorkout]) => {
-    freshnessContributionsCache[key] = [...byWorkout.values()].sort((a, b) => b.date - a.date);
-  });
-
-  const acute = collapseMuscleMap(acuteRaw);
-  const chronic = collapseMuscleMap(chronicRaw);
   const groupedKeys = new Set(MUSCLE_GROUPS.flatMap((g) => g.members));
   const lastTrained = {};
   MUSCLE_GROUPS.forEach((g) => {
@@ -1186,15 +1172,35 @@ export async function loadMuscleFreshness() {
     if (lastTrainedRaw[m.key]) lastTrained[m.key] = lastTrainedRaw[m.key];
   });
 
+  // Contributions shown in the click-through: every set from the group's
+  // OWN last-trained calendar day (not a fixed lookback window -- there's
+  // no "last 10 days" left in this model, just "what was the session that
+  // set this muscle's recovery clock").
+  freshnessContributionsCache = {};
+  muscleFreshnessKeys().forEach((key) => {
+    const last = lastTrained[key];
+    if (!last) return;
+    const lastDay = last.toISOString().slice(0, 10);
+    const members = MUSCLE_GROUPS.find((g) => g.key === key)?.members || [key];
+    const byWorkout = new Map();
+    members.forEach((m) => {
+      (setsByRawMuscle[m] || []).forEach((s) => {
+        if (s.date.toISOString().slice(0, 10) !== lastDay) return;
+        if (!byWorkout.has(s.workoutId)) byWorkout.set(s.workoutId, { workoutId: s.workoutId, date: s.date, name: s.name, credit: 0 });
+        byWorkout.get(s.workoutId).credit += s.credit;
+      });
+    });
+    freshnessContributionsCache[key] = [...byWorkout.values()].sort((a, b) => b.date - a.date);
+  });
+
   return muscleFreshnessKeys()
     .map((key) => {
       const last = lastTrained[key];
-      if (!last) return null; // never trained in the last year -- nothing meaningful to rank
-      const chronicPer10Days = (chronic[key] || 0) / (CHRONIC_DAYS / ACUTE_DAYS);
-      const acuteVal = acute[key] || 0;
-      const ratio = chronicPer10Days > 0 ? acuteVal / chronicPer10Days : acuteVal > 0 ? Infinity : null;
+      if (!last) return null; // never trained in the last year -- nothing meaningful to show
       const daysSince = Math.floor((now - last) / (24 * 60 * 60 * 1000));
-      return { key, label: freshnessLabel(key), ratio, daysSince };
+      const halfLife = RECOVERY_HALF_LIFE_DAYS[key] ?? DEFAULT_HALF_LIFE_DAYS;
+      const recoveryPct = Math.round(100 * (1 - Math.pow(0.5, daysSince / halfLife)));
+      return { key, label: freshnessLabel(key), daysSince, recoveryPct, halfLife };
     })
     .filter(Boolean);
 }
@@ -1205,13 +1211,11 @@ export function renderMuscleFreshness(container, rows, onOpenMuscle) {
     return;
   }
   const dayText = (d) => (d === 0 ? "today" : d === 1 ? "1 day ago" : `${d} days ago`);
-  const ratioText = (r) => (r === null ? "no recent baseline" : r === Infinity ? "new load" : `${Math.round(r * 100)}% of usual`);
-  const rank = (r) => (r.ratio === null ? -1 : r.ratio === Infinity ? 999 : r.ratio);
 
-  const freshest = [...rows].sort((a, b) => rank(a) - rank(b) || b.daysSince - a.daysSince).slice(0, 5);
-  const loaded = [...rows]
-    .filter((r) => r.ratio !== null)
-    .sort((a, b) => rank(b) - rank(a))
+  const mostRecovered = [...rows].sort((a, b) => b.recoveryPct - a.recoveryPct || b.daysSince - a.daysSince).slice(0, 5);
+  const stillFatigued = [...rows]
+    .filter((r) => r.recoveryPct < 100)
+    .sort((a, b) => a.recoveryPct - b.recoveryPct)
     .slice(0, 5);
 
   const clickable = !!onOpenMuscle;
@@ -1219,18 +1223,18 @@ export function renderMuscleFreshness(container, rows, onOpenMuscle) {
     list
       .map(
         (r) =>
-          `<${clickable ? "button type=\"button\"" : "div"} class="freshness-row${clickable ? " clickable" : ""}" data-key="${r.key}"><span class="freshness-label">${esc(r.label)}</span><span class="freshness-meta">${dayText(r.daysSince)} · ${ratioText(r.ratio)}</span></${clickable ? "button" : "div"}>`
+          `<${clickable ? "button type=\"button\"" : "div"} class="freshness-row${clickable ? " clickable" : ""}" data-key="${r.key}"><span class="freshness-label">${esc(r.label)}</span><span class="freshness-meta">${dayText(r.daysSince)} · ${r.recoveryPct}% recovered</span></${clickable ? "button" : "div"}>`
       )
       .join("");
 
   container.innerHTML = `
     <div class="freshness-col">
-      <h4 class="freshness-col-title">Freshest</h4>
-      ${rowsHtml(freshest)}
+      <h4 class="freshness-col-title">Most Recovered</h4>
+      ${rowsHtml(mostRecovered)}
     </div>
     <div class="freshness-col">
-      <h4 class="freshness-col-title">Recently Loaded</h4>
-      ${loaded.length ? rowsHtml(loaded) : '<p class="chart-empty">Nothing loaded recently.</p>'}
+      <h4 class="freshness-col-title">Still Fatigued</h4>
+      ${stillFatigued.length ? rowsHtml(stillFatigued) : '<p class="chart-empty">Nothing still recovering.</p>'}
     </div>
   `;
   if (clickable) {
@@ -1240,20 +1244,20 @@ export function renderMuscleFreshness(container, rows, onOpenMuscle) {
   }
 }
 
-// Which workouts fed a muscle group's acute (last-10-days) number, most
-// recent first -- reads straight from the cache loadMuscleFreshness()
-// already populated, same "reuse what's already loaded" approach as every
-// other drill-down here.
+// Which workouts made up the session that set this muscle's recovery
+// clock -- reads straight from the cache loadMuscleFreshness() already
+// populated, same "reuse what's already loaded" approach as every other
+// drill-down here.
 export function renderMuscleFreshnessDetail(container, key, onOpenWorkout) {
   container.innerHTML = "";
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>${esc(freshnessLabel(key))} — last ${ACUTE_DAYS} days</h4>`;
+  header.innerHTML = `<h4>${esc(freshnessLabel(key))}</h4>`;
   container.appendChild(header);
 
   const contributions = freshnessContributionsCache[key] || [];
   if (!contributions.length) {
-    container.appendChild(emptyNote("No workouts in the last 10 days touched this muscle."));
+    container.appendChild(emptyNote("No workouts touched this muscle yet."));
     return;
   }
 

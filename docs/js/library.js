@@ -3,8 +3,8 @@
 // primary/secondary muscle model, same override-vs-custom rules), just
 // backed by the exercise_overrides table instead of localStorage, so it's
 // reachable from the dashboard directly rather than only from FitLog.
-import { supabase } from "./supabaseClient.js?v=20260826k";
-import { MUSCLES, MOVEMENTS, MOVEMENT_LABEL, JOINTS, JOINT_LABEL, METRIC_TYPES, getAllExerciseEntries, setExerciseOverrides } from "./exerciseLibrary.js?v=20260826k";
+import { supabase } from "./supabaseClient.js?v=20260826l";
+import { MUSCLES, MOVEMENTS, MOVEMENT_LABEL, JOINTS, JOINT_LABEL, METRIC_TYPES, getAllExerciseEntries, setExerciseOverrides } from "./exerciseLibrary.js?v=20260826l";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

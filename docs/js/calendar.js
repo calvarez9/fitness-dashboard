@@ -1,6 +1,6 @@
 // ---------- Calendar: browse by day, see + open what happened ----------
-import { supabase } from "./supabaseClient.js?v=20260826k";
-import { renderWorkoutDetailData, renderCardioZones } from "./workouts.js?v=20260826k";
+import { supabase } from "./supabaseClient.js?v=20260826l";
+import { renderWorkoutDetailData, renderCardioZones } from "./workouts.js?v=20260826l";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
