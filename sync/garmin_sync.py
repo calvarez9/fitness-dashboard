@@ -19,6 +19,7 @@ Usage:
   python3 garmin_sync.py --backfill 90   # backfill the last 90 days (paced, slower)
 """
 import os
+import re
 import sys
 import time
 import argparse
@@ -59,7 +60,25 @@ def upsert(table, rows, on_conflict):
     headers = {**HEADERS, "Prefer": "resolution=merge-duplicates"}
     r = requests.post(url, headers=headers, json=rows, timeout=30)
     if not r.ok:
-        print(f"  ! upsert into {table} failed: {r.status_code} {r.text[:300]}", file=sys.stderr)
+        # PGRST204 ("Could not find the 'X' column ... in the schema cache")
+        # means a migration adding a column this script already writes
+        # hasn't been run against this Supabase project yet -- e.g.
+        # weight_kg (schema/015) landed here before schema/015 itself was
+        # applied. Rather than let one optional new field take down every
+        # other metric in the same row (steps, sleep, RHR, ...), strip it
+        # and retry once. The real fix is still running the migration --
+        # this just keeps the rest of the sync working in the meantime.
+        try:
+            missing = re.search(r"Could not find the '(\w+)' column", r.json().get("message", ""))
+        except Exception:
+            missing = None
+        if missing:
+            col = missing.group(1)
+            print(f"  ! {col} column missing on {table} (migration not run?) -- retrying without it", file=sys.stderr)
+            stripped = [{k: v for k, v in row.items() if k != col} for row in rows]
+            r = requests.post(url, headers=headers, json=stripped, timeout=30)
+        if not r.ok:
+            print(f"  ! upsert into {table} failed: {r.status_code} {r.text[:300]}", file=sys.stderr)
     r.raise_for_status()
 
 
