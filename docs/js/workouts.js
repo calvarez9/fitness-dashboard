@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260826l";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260826l";
-import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260826l";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260826l";
+import { supabase } from "./supabaseClient.js?v=20260829a";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260829a";
+import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260829a";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260829a";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -33,7 +33,7 @@ export async function loadWorkouts(start, end) {
     const [setsRes, segRes, linksRes] = await Promise.all([
       supabase
         .from("fitlog_sets")
-        .select("workout_id, exercise_name, set_index, reps, weight, rpe, is_warmup, done")
+        .select("workout_id, exercise_name, set_index, reps, weight, duration, rpe, is_warmup, done")
         .in("workout_id", ids)
         .order("set_index", { ascending: true }),
       supabase
@@ -476,6 +476,7 @@ async function saveWorkoutEdits(workout, state) {
           set_index: i,
           reps: s.reps,
           weight: s.weight,
+          duration: s.duration,
           rpe: s.rpe,
           is_warmup: !!s.isWarmup,
           done: true,
@@ -507,6 +508,22 @@ function numOrNull(v) {
   return Number.isNaN(n) ? null : n;
 }
 
+// Always exactly 2 grid cells (a spacer for the unused one on a
+// single-value type) so RPE/warmup/remove stay in the same column
+// regardless of exercise type -- same field set as FitLog's own Log view
+// (weighted/bodyweight/isometric/loadedCarry), just laid out for editing
+// an already-saved workout instead of live logging.
+function editSetValueFieldsHtml(metricType, s) {
+  const weightInput = `<input type="number" step="any" placeholder="lb" value="${s.weight ?? ""}" class="ex-weight" />`;
+  const repsInput = `<input type="number" step="any" placeholder="reps" value="${s.reps ?? ""}" class="ex-reps" />`;
+  const durationInput = `<input type="number" step="any" placeholder="sec" value="${s.duration ?? ""}" class="ex-duration" />`;
+  const blank = `<span></span>`;
+  if (metricType === "bodyweight") return repsInput + blank;
+  if (metricType === "isometric") return durationInput + blank;
+  if (metricType === "loadedCarry") return weightInput + durationInput;
+  return weightInput + repsInput;
+}
+
 function renderWorkoutEditForm(container, workout, sets, segments, linkedActivity, onSaved) {
   container.innerHTML = "";
 
@@ -533,9 +550,16 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
     });
     state.exercises = order.map((name) => ({
       name,
+      // Which fields this exercise actually logs -- same metricType concept
+      // FitLog's own Log view already uses, so an isometric hold or loaded
+      // carry gets the right inputs here instead of always assuming
+      // weight x reps. Fixed per exercise at load time: changing an
+      // exercise's type in the library mid-edit isn't a case this needs to
+      // handle live.
+      metricType: resolveExerciseMeta(name).metricType || "weighted",
       sets: [...byExercise.get(name)]
         .sort((a, b) => a.set_index - b.set_index)
-        .map((s) => ({ reps: s.reps, weight: s.weight, rpe: s.rpe, isWarmup: !!s.is_warmup })),
+        .map((s) => ({ reps: s.reps, weight: s.weight, duration: s.duration, rpe: s.rpe, isWarmup: !!s.is_warmup })),
     }));
   }
 
@@ -599,15 +623,14 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
         row.className = "edit-set-row";
         row.innerHTML = `
           <span class="set-marker">${setIdx + 1}</span>
-          <input type="number" step="any" placeholder="lb" value="${s.weight ?? ""}" />
-          <input type="number" step="any" placeholder="reps" value="${s.reps ?? ""}" />
-          <input type="number" step="any" placeholder="RPE" value="${s.rpe ?? ""}" />
+          ${editSetValueFieldsHtml(ex.metricType, s)}
+          <input type="number" step="any" placeholder="RPE" value="${s.rpe ?? ""}" class="ex-rpe" />
           <label class="warmup-toggle"><input type="checkbox" ${s.isWarmup ? "checked" : ""} /> W</label>
         `;
-        const [weightInput, repsInput, rpeInput] = row.querySelectorAll('input[type="number"]');
-        weightInput.addEventListener("input", (e) => (s.weight = numOrNull(e.target.value)));
-        repsInput.addEventListener("input", (e) => (s.reps = numOrNull(e.target.value)));
-        rpeInput.addEventListener("input", (e) => (s.rpe = numOrNull(e.target.value)));
+        row.querySelector(".ex-weight")?.addEventListener("input", (e) => (s.weight = numOrNull(e.target.value)));
+        row.querySelector(".ex-reps")?.addEventListener("input", (e) => (s.reps = numOrNull(e.target.value)));
+        row.querySelector(".ex-duration")?.addEventListener("input", (e) => (s.duration = numOrNull(e.target.value)));
+        row.querySelector(".ex-rpe").addEventListener("input", (e) => (s.rpe = numOrNull(e.target.value)));
         row.querySelector('input[type="checkbox"]').addEventListener("change", (e) => (s.isWarmup = e.target.checked));
 
         const removeSetBtn = document.createElement("button");
@@ -629,7 +652,7 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
       addSetBtn.textContent = "+ Add set";
       addSetBtn.addEventListener("click", () => {
         const last = ex.sets[ex.sets.length - 1];
-        ex.sets.push({ reps: last?.reps ?? null, weight: last?.weight ?? null, rpe: null, isWarmup: false });
+        ex.sets.push({ reps: last?.reps ?? null, weight: last?.weight ?? null, duration: last?.duration ?? null, rpe: null, isWarmup: false });
         renderBody();
       });
       block.appendChild(addSetBtn);
@@ -646,7 +669,11 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
       e.preventDefault();
       const name = input.value.trim();
       if (!name) return;
-      state.exercises.push({ name, sets: [{ reps: null, weight: null, rpe: null, isWarmup: false }] });
+      state.exercises.push({
+        name,
+        metricType: resolveExerciseMeta(name).metricType || "weighted",
+        sets: [{ reps: null, weight: null, duration: null, rpe: null, isWarmup: false }],
+      });
       renderBody();
     });
     body.appendChild(addExRow);
