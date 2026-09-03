@@ -1,5 +1,5 @@
-import { supabase } from "./supabaseClient.js?v=20260829a";
-import { renderTrendChart } from "./charts.js?v=20260829a";
+import { supabase } from "./supabaseClient.js?v=20260903a";
+import { renderTrendChart } from "./charts.js?v=20260903a";
 
 const $ = (sel) => document.querySelector(sel);
 const MI_PER_METER = 0.000621371;
@@ -26,6 +26,102 @@ function statTile(label, value, sub, delta) {
     sub ? `<div class="stat-sub">${sub}</div>` : ""
   }${delta ? `<div class="stat-delta">${delta}</div>` : ""}`;
   return el;
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtDayLabel(dateStr) {
+  return new Date(`${dateStr}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// Same tile look as statTile() above, but a real button when onClick is
+// given -- "click through everything" applies to these quick-glance tiles
+// too, not just the charts underneath them.
+function healthTile({ label, value, sub, onClick }) {
+  const el = document.createElement(onClick ? "button" : "div");
+  if (onClick) {
+    el.type = "button";
+    el.className = "stat-tile stat-tile-clickable";
+    el.addEventListener("click", onClick);
+  } else {
+    el.className = "stat-tile";
+  }
+  el.innerHTML = `<div class="stat-label">${esc(label)}</div><div class="stat-value">${esc(value)}</div>${
+    sub ? `<div class="stat-sub">${esc(sub)}</div>` : ""
+  }`;
+  return el;
+}
+
+// Recovery is reported per-activity ("recovered as of [time]"), not as a
+// daily trend -- this is a live "right now" status off the single most
+// recent activity that has it, recomputed fresh on every load rather than
+// stored as a point-in-time value that would go stale.
+function computeRecoveryHoursRemaining(activity) {
+  if (!activity) return null;
+  const endMs = new Date(activity.start_time).getTime() + (activity.duration_seconds || 0) * 1000;
+  const readyMs = endMs + (activity.recovery_time_minutes || 0) * 60 * 1000;
+  return Math.max(0, (readyMs - Date.now()) / (60 * 60 * 1000));
+}
+
+function renderHealthTiles({ daily, weightByDate, latestRecovery, onOpenDay }) {
+  const row = $("#healthStatRow");
+  if (row) {
+    row.innerHTML = "";
+    const latestIntensity = [...daily].reverse().find((d) => d.intensity_minutes != null);
+    const latestSleep = [...daily].reverse().find((d) => d.sleep_seconds != null);
+    const latestSteps = [...daily].reverse().find((d) => d.steps != null);
+    const recoveryHours = computeRecoveryHoursRemaining(latestRecovery);
+
+    row.appendChild(
+      healthTile({
+        label: "Intensity Min",
+        value: latestIntensity ? latestIntensity.intensity_minutes : "—",
+        sub: latestIntensity ? fmtDayLabel(latestIntensity.date) : "no data yet",
+        onClick: latestIntensity && onOpenDay ? () => onOpenDay(latestIntensity.date) : null,
+      })
+    );
+    row.appendChild(
+      healthTile({
+        label: "Sleep",
+        value: latestSleep ? `${(latestSleep.sleep_seconds / 3600).toFixed(1)}h` : "—",
+        sub: latestSleep ? fmtDayLabel(latestSleep.date) : "no data yet",
+        onClick: latestSleep && onOpenDay ? () => onOpenDay(latestSleep.date) : null,
+      })
+    );
+    row.appendChild(
+      healthTile({
+        label: "Steps",
+        value: latestSteps ? latestSteps.steps.toLocaleString() : "—",
+        sub: latestSteps ? fmtDayLabel(latestSteps.date) : "no data yet",
+        onClick: latestSteps && onOpenDay ? () => onOpenDay(latestSteps.date) : null,
+      })
+    );
+    row.appendChild(
+      healthTile({
+        label: "Recovery",
+        value: recoveryHours == null ? "—" : recoveryHours < 0.1 ? "Ready" : `${Math.round(recoveryHours)}h`,
+        sub: latestRecovery ? `since ${latestRecovery.activity_name || "last activity"}` : "no recent activity data",
+        onClick: latestRecovery && onOpenDay ? () => onOpenDay(isoDate(new Date(latestRecovery.start_time))) : null,
+      })
+    );
+  }
+
+  const weightRow = $("#weightStatRow");
+  if (weightRow) {
+    weightRow.innerHTML = "";
+    const latestWeightDate = [...weightByDate.keys()].sort().reverse().find((d) => weightByDate.get(d) != null);
+    const latestWeightKg = latestWeightDate ? weightByDate.get(latestWeightDate) : null;
+    weightRow.appendChild(
+      healthTile({
+        label: "Weight",
+        value: latestWeightKg != null ? `${(latestWeightKg * LB_PER_KG).toFixed(1)} lb` : "—",
+        sub: latestWeightDate ? fmtDayLabel(latestWeightDate) : "no weigh-ins yet",
+        onClick: latestWeightDate && onOpenDay ? () => onOpenDay(latestWeightDate) : null,
+      })
+    );
+  }
 }
 
 // Purely descriptive (no "good"/"bad" framing) -- direction of a metric like
@@ -69,7 +165,7 @@ async function fetchPeriodSummary(start, end) {
   };
 }
 
-export async function loadDashboard(days) {
+export async function loadDashboard(days, onOpenDay) {
   const end = new Date();
   const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
   const startISO = isoDate(start);
@@ -79,7 +175,7 @@ export async function loadDashboard(days) {
     supabase
       .from("garmin_daily_stats")
       .select(
-        "date, resting_hr, body_battery_high, body_battery_low, avg_stress, steps, sleep_seconds, deep_sleep_seconds, light_sleep_seconds, rem_sleep_seconds, awake_seconds"
+        "date, resting_hr, body_battery_high, body_battery_low, avg_stress, steps, sleep_seconds, deep_sleep_seconds, light_sleep_seconds, rem_sleep_seconds, awake_seconds, intensity_minutes"
       )
       .gte("date", startISO)
       .lte("date", endISO)
@@ -119,6 +215,26 @@ export async function loadDashboard(days) {
     console.warn("weight_kg unavailable (has schema/015_body_weight.sql been run?):", e.message);
   }
 
+  // Same isolation, same reason -- recovery_time_minutes is schema/016.
+  // Not date-range-scoped: recovery is a "right now" status off the single
+  // most recent activity that reports it, not a historical trend, so this
+  // looks back further than the selected range on purpose.
+  let latestRecovery = null;
+  try {
+    const farStart = new Date(end.getTime() - 21 * 24 * 60 * 60 * 1000);
+    const { data, error } = await supabase
+      .from("garmin_activities")
+      .select("id, activity_name, start_time, duration_seconds, recovery_time_minutes")
+      .not("recovery_time_minutes", "is", null)
+      .gte("start_time", farStart.toISOString())
+      .order("start_time", { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    latestRecovery = data?.[0] || null;
+  } catch (e) {
+    console.warn("recovery_time_minutes unavailable (has schema/016_recovery_time.sql been run?):", e.message);
+  }
+
   // A Garmin-auto-detected "Strength" activity isn't cardio -- excluded
   // from cardio-specific stats/charts below, but `activities` itself stays
   // unfiltered for the consistency heatmap, which cares about "did
@@ -144,11 +260,21 @@ export async function loadDashboard(days) {
 
   renderStats({ daily, activities: cardioActivities, workouts, priorSummary });
   renderHeatmap({ start, end, workouts, activities });
+  // Not date-range-scoped -- like Recovery itself, this is "what does
+  // right now look like", not a report on whatever range happens to be
+  // selected for the charts below it.
+  renderHealthTiles({ daily, weightByDate, latestRecovery, onOpenDay });
+
+  // Every Health tab chart opens the same day snapshot on click -- "where
+  // is this coming from" for a single day's metric is the rest of what
+  // happened that day (workouts, other metrics), not a deeper breakdown
+  // of the metric itself, which Garmin doesn't expose below one value/day.
+  const onDayClick = onOpenDay ? (p) => onOpenDay(isoDate(p.x)) : undefined;
 
   renderTrendChart(
     $("#chartRhr"),
     daily.map((d) => ({ x: new Date(d.date), y: d.resting_hr })),
-    { emptyMessage: "No resting HR data yet — run the sync job." }
+    { emptyMessage: "No resting HR data yet — run the sync job.", onPointClick: onDayClick }
   );
 
   renderTrendChart(
@@ -157,25 +283,26 @@ export async function loadDashboard(days) {
     {
       band: daily.map((d) => ({ x: new Date(d.date), yHigh: d.body_battery_high, yLow: d.body_battery_low })),
       emptyMessage: "No Body Battery data yet.",
+      onPointClick: onDayClick,
     }
   );
 
   renderTrendChart(
     $("#chartStress"),
     daily.map((d) => ({ x: new Date(d.date), y: d.avg_stress })),
-    { emptyMessage: "No stress data yet." }
+    { emptyMessage: "No stress data yet.", onPointClick: onDayClick }
   );
 
   renderTrendChart(
     $("#chartSteps"),
     daily.map((d) => ({ x: new Date(d.date), y: d.steps })),
-    { emptyMessage: "No steps data yet." }
+    { emptyMessage: "No steps data yet.", onPointClick: onDayClick }
   );
 
   renderTrendChart(
     $("#chartSleep"),
     daily.map((d) => ({ x: new Date(d.date), y: d.sleep_seconds != null ? +(d.sleep_seconds / 3600).toFixed(1) : null })),
-    { emptyMessage: "No sleep data yet." }
+    { emptyMessage: "No sleep data yet.", onPointClick: onDayClick }
   );
   renderSleepStages(daily);
 
@@ -185,7 +312,7 @@ export async function loadDashboard(days) {
       const kg = weightByDate.get(d.date);
       return { x: new Date(d.date), y: kg != null ? +(kg * LB_PER_KG).toFixed(1) : null };
     }),
-    { emptyMessage: "No weigh-ins yet — weigh in on the Garmin scale and it'll show up after the next sync." }
+    { emptyMessage: "No weigh-ins yet — weigh in on the Garmin scale and it'll show up after the next sync.", onPointClick: onDayClick }
   );
 
   // Strength volume: working sets per week

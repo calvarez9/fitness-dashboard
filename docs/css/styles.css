@@ -92,6 +92,9 @@ input, select {
 main#content { padding: 16px 16px 60px; }
 
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 24px; }
+/* A single tile in an auto-fit grid stretches to fill the row -- this one
+   is meant to read as one more small square, not a full-width bar. */
+.weight-stat-row { grid-template-columns: minmax(110px, 140px); }
 .emphasis-row { margin-bottom: 10px; }
 .stat-tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-m); padding: 12px; }
 .stat-tile .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }

@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260829a";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260829a";
-import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260829a";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260829a";
+import { supabase } from "./supabaseClient.js?v=20260903a";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260903a";
+import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260903a";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260903a";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {

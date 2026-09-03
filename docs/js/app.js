@@ -1,7 +1,7 @@
-import { loadDashboard } from "./dashboard.js?v=20260829a";
-import { supabase } from "./supabaseClient.js?v=20260829a";
-import { importFitLogBackup } from "./importFitLog.js?v=20260829a";
-import { renderBarList, makeCollapsible } from "./charts.js?v=20260829a";
+import { loadDashboard } from "./dashboard.js?v=20260903a";
+import { supabase } from "./supabaseClient.js?v=20260903a";
+import { importFitLogBackup } from "./importFitLog.js?v=20260903a";
+import { renderBarList, makeCollapsible } from "./charts.js?v=20260903a";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -35,12 +35,12 @@ import {
   loadOtherTrainingZones,
   renderCardioZones,
   renderZoneContributionDetail,
-} from "./workouts.js?v=20260829a";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260829a";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260829a";
-import { renderMetricDetail } from "./health.js?v=20260829a";
-import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260829a";
-import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260829a";
+} from "./workouts.js?v=20260903a";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260903a";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260903a";
+import { renderMetricDetail } from "./health.js?v=20260903a";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260903a";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260903a";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -196,6 +196,7 @@ function renderModalTop() {
       (weekPayload) => pushModal("jointWeek", weekPayload)
     );
   else if (top.type === "jointWeek") renderJointWeekDetail(body, top.payload, (id) => pushModal("workout", id));
+  else if (top.type === "daySnapshot") renderDaySnapshotModal(body, top.payload);
   else if (top.type === "muscleFreshness") renderMuscleFreshnessDetail(body, top.payload, (id) => pushModal("workout", id));
   else if (top.type === "hrZone") renderZoneContributionDetail(body, top.payload.zone, top.payload.contributions);
   else if (top.type === "emphasis") {
@@ -210,6 +211,20 @@ function pushModal(type, payload) {
   modalStack.push({ type, payload });
   $("#workoutModal").hidden = false;
   renderModalTop();
+}
+
+// "Where is this data point coming from" for a Health tab chart or tile --
+// reuses the Calendar tab's own day-detail render (health stats + any
+// workouts/activities that day) rather than a second implementation,
+// fetching just that one day's month rather than requiring the Calendar
+// tab to already be loaded.
+async function renderDaySnapshotModal(container, dateKey) {
+  container.innerHTML = `<p class="chart-empty">Loading…</p>`;
+  const { byDay, dailyByDate } = await loadMonth(new Date(`${dateKey}T12:00:00`));
+  await renderDayDetail(container, dateKey, byDay.get(dateKey) || [], dailyByDate.get(dateKey), () => {
+    closeModal();
+    refresh();
+  });
 }
 
 function popModal() {
@@ -374,7 +389,7 @@ async function refresh() {
     // athleticism stats, since resolveExerciseMeta() checks them first.
     await loadExerciseOverrides();
     refreshLibraryList();
-    await loadDashboard(currentRangeDays());
+    await loadDashboard(currentRangeDays(), (dateKey) => pushModal("daySnapshot", dateKey));
     await refreshWorkouts(currentRangeDays());
     await refreshPRBoard();
     await refreshOpenMetricPanels();

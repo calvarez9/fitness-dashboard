@@ -94,6 +94,23 @@ export function renderTrendChart(svg, points, opts = {}) {
     const leg = el("text", { class: "legend-text", x: padL, y: padT });
     leg.textContent = "— high    — low";
     svg.appendChild(leg);
+
+    if (opts.onPointClick) {
+      // A vertical hit strip per point rather than a small circle -- the
+      // band itself has real height to tap into, not just a thin line.
+      const stripW = Math.max(10, (W - padL - padR) / Math.max(1, bandValid.length - 1) - 2);
+      bandValid.forEach((p) => {
+        const hit = el("rect", {
+          class: "dot-hit",
+          x: x(p.x) - stripW / 2,
+          y: Math.min(y(p.yHigh), y(p.yLow)) - 4,
+          width: stripW,
+          height: Math.abs(y(p.yHigh) - y(p.yLow)) + 8,
+        });
+        hit.addEventListener("click", () => opts.onPointClick(p));
+        svg.appendChild(hit);
+      });
+    }
   }
 
   // single line
