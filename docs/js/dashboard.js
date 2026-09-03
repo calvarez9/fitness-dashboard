@@ -1,5 +1,5 @@
-import { supabase } from "./supabaseClient.js?v=20260903a";
-import { renderTrendChart } from "./charts.js?v=20260903a";
+import { supabase } from "./supabaseClient.js?v=20260903b";
+import { renderTrendChart } from "./charts.js?v=20260903b";
 
 const $ = (sel) => document.querySelector(sel);
 const MI_PER_METER = 0.000621371;
@@ -65,39 +65,81 @@ function computeRecoveryHoursRemaining(activity) {
   return Math.max(0, (readyMs - Date.now()) / (60 * 60 * 1000));
 }
 
-function renderHealthTiles({ daily, weightByDate, latestRecovery, onOpenDay }) {
+function avg(values) {
+  const v = values.filter((n) => n != null);
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+}
+
+function renderHealthTiles({ daily, weightByDate, latestRecovery, onOpenDay, days }) {
+  // "Today" (days <= 1) shows the latest actual value for each metric, with
+  // click-through to that specific day. Any wider range averages the metric
+  // over the days that have data instead -- an average isn't one day's
+  // reading, so those tiles aren't clickable.
+  const isToday = days <= 1;
+  const rangeLabel = `${days}-day avg`;
+
   const row = $("#healthStatRow");
   if (row) {
     row.innerHTML = "";
-    const latestIntensity = [...daily].reverse().find((d) => d.intensity_minutes != null);
-    const latestSleep = [...daily].reverse().find((d) => d.sleep_seconds != null);
-    const latestSteps = [...daily].reverse().find((d) => d.steps != null);
     const recoveryHours = computeRecoveryHoursRemaining(latestRecovery);
 
-    row.appendChild(
-      healthTile({
-        label: "Intensity Min",
-        value: latestIntensity ? latestIntensity.intensity_minutes : "—",
-        sub: latestIntensity ? fmtDayLabel(latestIntensity.date) : "no data yet",
-        onClick: latestIntensity && onOpenDay ? () => onOpenDay(latestIntensity.date) : null,
-      })
-    );
-    row.appendChild(
-      healthTile({
-        label: "Sleep",
-        value: latestSleep ? `${(latestSleep.sleep_seconds / 3600).toFixed(1)}h` : "—",
-        sub: latestSleep ? fmtDayLabel(latestSleep.date) : "no data yet",
-        onClick: latestSleep && onOpenDay ? () => onOpenDay(latestSleep.date) : null,
-      })
-    );
-    row.appendChild(
-      healthTile({
-        label: "Steps",
-        value: latestSteps ? latestSteps.steps.toLocaleString() : "—",
-        sub: latestSteps ? fmtDayLabel(latestSteps.date) : "no data yet",
-        onClick: latestSteps && onOpenDay ? () => onOpenDay(latestSteps.date) : null,
-      })
-    );
+    if (isToday) {
+      const latestIntensity = [...daily].reverse().find((d) => d.intensity_minutes != null);
+      const latestSleep = [...daily].reverse().find((d) => d.sleep_seconds != null);
+      const latestSteps = [...daily].reverse().find((d) => d.steps != null);
+
+      row.appendChild(
+        healthTile({
+          label: "Intensity Min",
+          value: latestIntensity ? latestIntensity.intensity_minutes : "—",
+          sub: latestIntensity ? fmtDayLabel(latestIntensity.date) : "no data yet",
+          onClick: latestIntensity && onOpenDay ? () => onOpenDay(latestIntensity.date) : null,
+        })
+      );
+      row.appendChild(
+        healthTile({
+          label: "Sleep",
+          value: latestSleep ? `${(latestSleep.sleep_seconds / 3600).toFixed(1)}h` : "—",
+          sub: latestSleep ? fmtDayLabel(latestSleep.date) : "no data yet",
+          onClick: latestSleep && onOpenDay ? () => onOpenDay(latestSleep.date) : null,
+        })
+      );
+      row.appendChild(
+        healthTile({
+          label: "Steps",
+          value: latestSteps ? latestSteps.steps.toLocaleString() : "—",
+          sub: latestSteps ? fmtDayLabel(latestSteps.date) : "no data yet",
+          onClick: latestSteps && onOpenDay ? () => onOpenDay(latestSteps.date) : null,
+        })
+      );
+    } else {
+      const avgIntensity = avg(daily.map((d) => d.intensity_minutes));
+      const avgSleepH = avg(daily.map((d) => d.sleep_seconds)) / 3600;
+      const avgSteps = avg(daily.map((d) => d.steps));
+
+      row.appendChild(
+        healthTile({
+          label: "Intensity Min",
+          value: avgIntensity != null ? Math.round(avgIntensity) : "—",
+          sub: avgIntensity != null ? rangeLabel : "no data yet",
+        })
+      );
+      row.appendChild(
+        healthTile({
+          label: "Sleep",
+          value: Number.isFinite(avgSleepH) ? `${avgSleepH.toFixed(1)}h` : "—",
+          sub: Number.isFinite(avgSleepH) ? rangeLabel : "no data yet",
+        })
+      );
+      row.appendChild(
+        healthTile({
+          label: "Steps",
+          value: avgSteps != null ? Math.round(avgSteps).toLocaleString() : "—",
+          sub: avgSteps != null ? rangeLabel : "no data yet",
+        })
+      );
+    }
+
     row.appendChild(
       healthTile({
         label: "Recovery",
@@ -111,16 +153,27 @@ function renderHealthTiles({ daily, weightByDate, latestRecovery, onOpenDay }) {
   const weightRow = $("#weightStatRow");
   if (weightRow) {
     weightRow.innerHTML = "";
-    const latestWeightDate = [...weightByDate.keys()].sort().reverse().find((d) => weightByDate.get(d) != null);
-    const latestWeightKg = latestWeightDate ? weightByDate.get(latestWeightDate) : null;
-    weightRow.appendChild(
-      healthTile({
-        label: "Weight",
-        value: latestWeightKg != null ? `${(latestWeightKg * LB_PER_KG).toFixed(1)} lb` : "—",
-        sub: latestWeightDate ? fmtDayLabel(latestWeightDate) : "no weigh-ins yet",
-        onClick: latestWeightDate && onOpenDay ? () => onOpenDay(latestWeightDate) : null,
-      })
-    );
+    if (isToday) {
+      const latestWeightDate = [...weightByDate.keys()].sort().reverse().find((d) => weightByDate.get(d) != null);
+      const latestWeightKg = latestWeightDate ? weightByDate.get(latestWeightDate) : null;
+      weightRow.appendChild(
+        healthTile({
+          label: "Weight",
+          value: latestWeightKg != null ? `${(latestWeightKg * LB_PER_KG).toFixed(1)} lb` : "—",
+          sub: latestWeightDate ? fmtDayLabel(latestWeightDate) : "no weigh-ins yet",
+          onClick: latestWeightDate && onOpenDay ? () => onOpenDay(latestWeightDate) : null,
+        })
+      );
+    } else {
+      const avgWeightKg = avg([...weightByDate.values()]);
+      weightRow.appendChild(
+        healthTile({
+          label: "Weight",
+          value: avgWeightKg != null ? `${(avgWeightKg * LB_PER_KG).toFixed(1)} lb` : "—",
+          sub: avgWeightKg != null ? rangeLabel : "no weigh-ins yet",
+        })
+      );
+    }
   }
 }
 
@@ -260,10 +313,11 @@ export async function loadDashboard(days, onOpenDay) {
 
   renderStats({ daily, activities: cardioActivities, workouts, priorSummary });
   renderHeatmap({ start, end, workouts, activities });
-  // Not date-range-scoped -- like Recovery itself, this is "what does
-  // right now look like", not a report on whatever range happens to be
-  // selected for the charts below it.
-  renderHealthTiles({ daily, weightByDate, latestRecovery, onOpenDay });
+  // Intensity/Sleep/Steps/Weight follow the selected range -- today's actual
+  // value when "Today" is selected, an average over the range otherwise.
+  // Recovery is the exception: it's a "what does right now look like" status
+  // off the single most recent activity, not something a range can average.
+  renderHealthTiles({ daily, weightByDate, latestRecovery, onOpenDay, days });
 
   // Every Health tab chart opens the same day snapshot on click -- "where
   // is this coming from" for a single day's metric is the rest of what

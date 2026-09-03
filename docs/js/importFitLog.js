@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient.js?v=20260903a";
+import { supabase } from "./supabaseClient.js?v=20260903b";
 
 // Imports a FitLog backup export (Settings -> Export backup in the FitLog app)
 // into the fitlog_workouts / fitlog_sets / fitlog_cardio_segments tables,
