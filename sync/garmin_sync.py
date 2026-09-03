@@ -312,6 +312,12 @@ def sync_activities(garmin, limit=20):
                 "anaerobic_training_effect": a.get("anaerobicTrainingEffect"),
                 "training_effect_label": a.get("trainingEffectLabel"),
                 "activity_training_load": a.get("activityTrainingLoad"),
+                # "Recovered as of [time]" on the watch/app -- Garmin reports
+                # this in minutes on the activity summary. Best-effort field
+                # name, same caveat as the training-effect fields above: if
+                # it comes back null after a real sync, check raw on a
+                # recent row for the actual key.
+                "recovery_time_minutes": a.get("recoveryTime"),
                 **zones,
                 "raw": a,
             }

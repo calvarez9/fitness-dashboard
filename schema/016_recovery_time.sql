@@ -1,0 +1,14 @@
+-- ============================================================
+-- Garmin's Recovery Time -- hours until ready for another hard effort,
+-- factoring the activity itself plus sleep/stress/daily activity since.
+-- Activity-scoped (Garmin reports it per-activity, as "recovered as of
+-- [time]"), not a daily metric like steps/sleep, so it lives on
+-- garmin_activities rather than garmin_daily_stats. The dashboard shows
+-- it as a live "hours remaining" tile computed from the most recent
+-- activity that has this set, not a historical trend.
+--
+-- Chosen over Training Readiness (Garmin's newer 0-100 daily score) --
+-- that requires HRV Status, which needs a newer HR sensor than the
+-- Forerunner 745 (and similar-generation watches) has.
+-- ============================================================
+alter table garmin_activities add column if not exists recovery_time_minutes numeric;
