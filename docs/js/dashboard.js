@@ -1,5 +1,5 @@
-import { supabase } from "./supabaseClient.js?v=20260911a";
-import { renderTrendChart } from "./charts.js?v=20260911a";
+import { supabase } from "./supabaseClient.js?v=20260911b";
+import { renderTrendChart } from "./charts.js?v=20260911b";
 
 const $ = (sel) => document.querySelector(sel);
 const MI_PER_METER = 0.000621371;

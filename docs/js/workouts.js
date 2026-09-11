@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260911a";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260911a";
-import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260911a";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260911a";
+import { supabase } from "./supabaseClient.js?v=20260911b";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260911b";
+import { renderBarList, renderProgressChart, renderTrendChart, renderMultiTrendChart } from "./charts.js?v=20260911b";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260911b";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -1932,14 +1932,12 @@ export function renderZoneContributionDetail(container, zoneNumber, contribution
 // (set count x that exercise's jointLoad weight for the joint), same
 // modeling approach as muscle/movement volume.
 
-// Deliberately NOT scoped to the dashboard's range selector (7/30/90/...) --
-// same reasoning as Muscle Freshness and Ready to Train just above/below.
-// "Should I train this joint today" is a standing question, not one that
-// should change shape because someone happened to have "Last 7 days"
-// selected while checking something unrelated. Fixed at 3 weeks vs the 3
-// weeks before that -- long enough to smooth over a single sparse week of
-// Boostcamp-imported history, short enough to still read as "lately."
-const JOINT_LOAD_DAYS = 21;
+// Scoped to the dashboard's range selector (7/30/90/...), same as the
+// Health tiles' averages: current = the selected N days, prior = the N
+// days before that. (Previously fixed at 3 weeks regardless of the
+// selector -- changed on request so "if I choose seven days, compare it
+// to the seven days before" actually holds for any range chosen.)
+let jointLoadDays = 21;
 
 // Populated by loadJointLoad() for the CURRENT period only (not the prior
 // one, which exists only to compute the delta) -- jointKey -> [{name,
@@ -1975,10 +1973,11 @@ async function tallyJointLoadInWindow(start, end, breakdownByJoint) {
   return totals;
 }
 
-export async function loadJointLoad() {
+export async function loadJointLoad(days) {
+  jointLoadDays = days;
   const now = new Date();
-  const periodStart = new Date(now.getTime() - JOINT_LOAD_DAYS * 24 * 60 * 60 * 1000);
-  const prevStart = new Date(periodStart.getTime() - JOINT_LOAD_DAYS * 24 * 60 * 60 * 1000);
+  const periodStart = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const prevStart = new Date(periodStart.getTime() - days * 24 * 60 * 60 * 1000);
 
   const breakdown = {};
   const [current, prev] = await Promise.all([tallyJointLoadInWindow(periodStart, now, breakdown), tallyJointLoadInWindow(prevStart, periodStart)]);
@@ -2140,7 +2139,7 @@ function jointDeltaText(current, prev) {
   return `${pct > 0 ? "+" : ""}${pct}% vs prior period`;
 }
 
-export function renderJointLoad(container, { current, prev }, onOpenJoint) {
+export function renderJointLoad(container, { current, prev }, days, onOpenJoint, onOpenWeek) {
   container.innerHTML = `
     <div class="stat-row emphasis-row">
       ${JOINTS.map((j) => {
@@ -2152,13 +2151,26 @@ export function renderJointLoad(container, { current, prev }, onOpenJoint) {
         </button>`;
       }).join("")}
     </div>
-    <p class="muted small">Last ${JOINT_LOAD_DAYS} days, weighted by how much each exercise loads that joint, compared to the ${JOINT_LOAD_DAYS} days before that -- a fatigue signal, not a score to chase, and independent of the range selector above. Tap a joint to see what's contributing.</p>
+    <p class="muted small">Last ${days} days, weighted by how much each exercise loads that joint, compared to the ${days} days before that -- a fatigue signal, not a score to chase. Tap a joint to see what's contributing.</p>
+    <svg id="chartJointLoad" class="trend-svg" viewBox="0 0 700 220" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="chart-legend"></div>
+    <p class="muted small">16-week trend, independent of the range above. Tap a point to see that week's workouts.</p>
   `;
   if (onOpenJoint) {
     container.querySelectorAll("[data-joint]").forEach((btn) => {
       btn.addEventListener("click", () => onOpenJoint(btn.dataset.joint));
     });
   }
+
+  // JOINTS's own fixed order (Low Back, Knees, Shoulders) is the series
+  // order too -- same "assign categorical color by fixed order, never
+  // re-cycled per selection" rule as everywhere else colored in this app.
+  const series = JOINTS.map((j) => ({ key: j.key, label: j.label, points: jointLoadHistoryCache[j.key] || [] }));
+  renderMultiTrendChart(container.querySelector("#chartJointLoad"), series, {
+    emptyMessage: "No history yet.",
+    legendEl: container.querySelector(".chart-legend"),
+    onPointClick: onOpenWeek ? (jointKey, p) => onOpenWeek({ jointKey, weekKey: p.x.toISOString().slice(0, 10) }) : null,
+  });
 }
 
 // Which exercises (in Joint Load's fixed 3-week window) are contributing
@@ -2192,7 +2204,7 @@ export function renderJointDetail(container, jointKey, onOpenExercise, onOpenWee
 
   const subhead = document.createElement("div");
   subhead.className = "workout-detail-header";
-  subhead.innerHTML = `<h4>Contributing exercises — last ${JOINT_LOAD_DAYS} days</h4>`;
+  subhead.innerHTML = `<h4>Contributing exercises — last ${jointLoadDays} days</h4>`;
   container.appendChild(subhead);
 
   const totals = jointLoadContributionsCache[jointKey] || new Map();
@@ -2248,15 +2260,17 @@ export function renderJointWeekDetail(container, { jointKey, weekKey }, onOpenWo
 }
 
 // ---------- Claude hand-off: plain-text summary of recent sessions ----------
-// Formats the last few sessions into copy/paste-ready text for a manual
-// claude.ai conversation, instead of wiring up a backend API call -- lets
-// you actually converse about the recommendation instead of getting one
-// fire-and-forget response. Deliberately does NOT reuse loadWorkouts()'s
-// module-level `cache` above: that cache backs the visible Workouts list
-// (whatever range is currently selected), and this needs its own fixed
-// "last N sessions" window regardless of that range -- reusing it would
-// silently swap out what the Workouts list shows as a side effect of
-// copying a summary.
+// Formats the last few STRENGTH sessions into copy/paste-ready text for a
+// manual claude.ai conversation, instead of wiring up a backend API call --
+// lets you actually converse about the recommendation instead of getting
+// one fire-and-forget response. Cardio (walking especially) is deliberately
+// excluded: it happens often enough that it crowded out the strength
+// history that's actually useful for a training recommendation. Also
+// deliberately does NOT reuse loadWorkouts()'s module-level `cache` above:
+// that cache backs the visible Workouts list (whatever range is currently
+// selected), and this needs its own fixed "last N sessions" window
+// regardless of that range -- reusing it would silently swap out what the
+// Workouts list shows as a side effect of copying a summary.
 const CLAUDE_SESSION_COUNT = 5;
 const CLAUDE_LOOKBACK_DAYS = 45; // generous cushion to find N sessions even at low training frequency
 const CLAUDE_JOINT_RISK_MENTION_THRESHOLD = 1.5; // same cutoff as Ready to Train's overload flag
@@ -2292,37 +2306,17 @@ function formatSetLine(exerciseName, sets) {
   return `  - ${exerciseName}: ${parts.join(", ")}`;
 }
 
-function formatFitlogSession({ date, workout, sets, segments }) {
-  const lines = [`${fmtSessionDate(date)} — ${workout.name || (workout.type === "cardio" ? "Cardio" : "Strength")}`];
-  if (workout.type === "cardio") {
-    if (segments.length) {
-      segments.forEach((seg) => {
-        const bits = [`${seg.duration_min ?? "?"} min`];
-        if (seg.distance) bits.push(`${seg.distance} mi`);
-        if (seg.avg_hr) bits.push(`avg HR ${seg.avg_hr}`);
-        if (seg.calories) bits.push(`${seg.calories} cal`);
-        lines.push(`  - ${seg.activity_type || "Cardio"}: ${bits.join(", ")}`);
-      });
-    } else {
-      lines.push("  - (no segment detail logged)");
-    }
-  } else if (sets.length) {
+// Strength-only by the time this is called (buildSessionSummaryText's own
+// query excludes type "cardio"), so this only ever formats sets.
+function formatFitlogSession({ date, workout, sets }) {
+  const lines = [`${fmtSessionDate(date)} — ${workout.name || "Strength"}`];
+  if (sets.length) {
     groupSetsByExercise(sets).forEach(([name, exSets]) => lines.push(formatSetLine(name, exSets)));
   } else {
     lines.push("  - (no sets logged)");
   }
   if (workout.notes) lines.push(`  Notes: ${workout.notes}`);
   return lines.join("\n");
-}
-
-function formatGarminSession({ date, activity }) {
-  const mins = activity.duration_seconds ? Math.round(activity.duration_seconds / 60) : null;
-  const miles = activity.distance_meters ? (activity.distance_meters * 0.000621371).toFixed(1) : null;
-  const bits = [`${mins ?? "?"} min`];
-  if (miles) bits.push(`${miles} mi`);
-  if (activity.avg_hr) bits.push(`avg HR ${activity.avg_hr}`);
-  if (activity.calories) bits.push(`${activity.calories} cal`);
-  return `${fmtSessionDate(date)} — ${activity.activity_name || activity.activity_type} (Garmin)\n  - ${bits.join(", ")}`;
 }
 
 // Builds the copy/paste text: last N sessions (FitLog strength/cardio +
@@ -2334,14 +2328,17 @@ export async function buildSessionSummaryText() {
   const now = new Date();
   const start = new Date(now.getTime() - CLAUDE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 
-  const [workoutsRes, activitiesRes, freshnessRows, jointRisk] = await Promise.all([
-    supabase.from("fitlog_workouts").select("id, date, name, type, notes").gte("date", start.toISOString()).order("date", { ascending: false }),
+  // Strength only -- cardio (walking especially) happens often enough that
+  // it crowded out the actually-useful strength history when both were
+  // mixed into "last 5 sessions." A recommendation about what to train
+  // next is a strength-training question here, not a cardio one.
+  const [workoutsRes, freshnessRows, jointRisk] = await Promise.all([
     supabase
-      .from("garmin_activities")
-      .select("id, activity_name, activity_type, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories")
-      .neq("activity_type", "strength_training")
-      .gte("start_time", start.toISOString())
-      .order("start_time", { ascending: false }),
+      .from("fitlog_workouts")
+      .select("id, date, name, type, notes")
+      .neq("type", "cardio")
+      .gte("date", start.toISOString())
+      .order("date", { ascending: false }),
     loadMuscleFreshness().catch(() => []),
     loadJointRisk().catch(() => ({})),
   ]);
@@ -2350,29 +2347,14 @@ export async function buildSessionSummaryText() {
 
   const ids = workouts.map((w) => w.id);
   let sets = [];
-  let segments = [];
-  let linkedActivityIds = new Set();
   if (ids.length) {
-    const [setsRes, segRes, linksRes] = await Promise.all([
-      supabase
-        .from("fitlog_sets")
-        .select("workout_id, exercise_name, set_index, reps, weight, duration, rpe, is_warmup")
-        .in("workout_id", ids)
-        .order("set_index", { ascending: true }),
-      supabase.from("fitlog_cardio_segments").select("workout_id, activity_type, duration_min, distance, calories, avg_hr, max_hr").in("workout_id", ids),
-      supabase
-        .from("workout_links")
-        .select("garmin_activity_id")
-        .in("fitlog_workout_id", ids)
-        .then(
-          (r) => r,
-          () => ({ data: [] })
-        ),
-    ]);
-    if (setsRes.error) throw setsRes.error;
-    sets = setsRes.data || [];
-    segments = segRes.error ? [] : segRes.data || [];
-    linkedActivityIds = new Set((linksRes.data || []).map((l) => l.garmin_activity_id));
+    const { data, error } = await supabase
+      .from("fitlog_sets")
+      .select("workout_id, exercise_name, set_index, reps, weight, duration, rpe, is_warmup")
+      .in("workout_id", ids)
+      .order("set_index", { ascending: true });
+    if (error) throw error;
+    sets = data || [];
   }
 
   const setsByWorkout = new Map();
@@ -2380,28 +2362,12 @@ export async function buildSessionSummaryText() {
     if (!setsByWorkout.has(s.workout_id)) setsByWorkout.set(s.workout_id, []);
     setsByWorkout.get(s.workout_id).push(s);
   });
-  const segmentsByWorkout = new Map();
-  segments.forEach((s) => {
-    if (!segmentsByWorkout.has(s.workout_id)) segmentsByWorkout.set(s.workout_id, []);
-    segmentsByWorkout.get(s.workout_id).push(s);
-  });
 
-  const fitlogSessions = workouts.map((w) => ({
-    date: new Date(w.date),
-    kind: "fitlog",
-    workout: w,
-    sets: setsByWorkout.get(w.id) || [],
-    segments: segmentsByWorkout.get(w.id) || [],
-  }));
-  const garminSessions = (activitiesRes.data || [])
-    .filter((a) => !linkedActivityIds.has(a.id))
-    .map((a) => ({ date: new Date(a.start_time), kind: "garmin", activity: a }));
-
-  const mostRecent = [...fitlogSessions, ...garminSessions].sort((a, b) => b.date - a.date).slice(0, CLAUDE_SESSION_COUNT);
+  const mostRecent = workouts.map((w) => ({ date: new Date(w.date), workout: w, sets: setsByWorkout.get(w.id) || [] })).slice(0, CLAUDE_SESSION_COUNT);
   if (!mostRecent.length) return null;
   const chronological = mostRecent.slice().reverse(); // oldest first, reads as a narrative
 
-  const sessionBlocks = chronological.map((s) => (s.kind === "fitlog" ? formatFitlogSession(s) : formatGarminSession(s))).join("\n\n");
+  const sessionBlocks = chronological.map((s) => formatFitlogSession(s)).join("\n\n");
 
   const overloadedJoints = Object.entries(jointRisk)
     .filter(([, ratio]) => ratio != null && ratio > CLAUDE_JOINT_RISK_MENTION_THRESHOLD)
@@ -2417,7 +2383,7 @@ export async function buildSessionSummaryText() {
   if (fatiguedMuscles.length) contextLines.push(`Still fatigued: ${fatiguedMuscles.join(", ")}.`);
 
   return [
-    `Here are my last ${chronological.length} training sessions from my fitness log. Based on this, what should I focus on next -- which muscles or movements need attention -- and do you have a specific workout recommendation?`,
+    `Here are my last ${chronological.length} strength training sessions from my fitness log. Based on this, what should I focus on next -- which muscles or movements need attention -- and do you have a specific workout recommendation?`,
     "",
     sessionBlocks,
     contextLines.length ? "\n" + contextLines.join("\n") : "",

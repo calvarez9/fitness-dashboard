@@ -141,12 +141,20 @@ main#content { padding: 16px 16px 60px; }
 .trend-svg .baseline { stroke: var(--baseline); stroke-width: 1; }
 .trend-svg .series-a { stroke: var(--series-1); fill: none; stroke-width: 2; }
 .trend-svg .series-b { stroke: var(--series-2); fill: none; stroke-width: 2; }
+.trend-svg .series-c { stroke: var(--series-3); fill: none; stroke-width: 2; }
 .trend-svg .band { fill: var(--series-1); opacity: 0.15; }
 .trend-svg .dot-a { fill: var(--series-1); }
 .trend-svg .dot-b { fill: var(--series-2); }
+.trend-svg .dot-c { fill: var(--series-3); }
 .trend-svg .dot-hit { fill: transparent; cursor: pointer; }
 .trend-svg .legend-text { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
 .chart-empty { color: var(--text-muted); font-size: 13px; padding: 30px; text-align: center; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
+.chart-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); }
+.chart-legend-swatch { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+.chart-legend-swatch.swatch-a { background: var(--series-1); }
+.chart-legend-swatch.swatch-b { background: var(--series-2); }
+.chart-legend-swatch.swatch-c { background: var(--series-3); }
 
 /* ---------- Sleep stage breakdown ---------- */
 .sleep-stages { margin-top: 12px; }

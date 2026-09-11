@@ -1,7 +1,7 @@
-import { loadDashboard } from "./dashboard.js?v=20260911a";
-import { supabase } from "./supabaseClient.js?v=20260911a";
-import { importFitLogBackup } from "./importFitLog.js?v=20260911a";
-import { renderBarList, makeCollapsible } from "./charts.js?v=20260911a";
+import { loadDashboard } from "./dashboard.js?v=20260911b";
+import { supabase } from "./supabaseClient.js?v=20260911b";
+import { importFitLogBackup } from "./importFitLog.js?v=20260911b";
+import { renderBarList, makeCollapsible } from "./charts.js?v=20260911b";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -36,12 +36,12 @@ import {
   renderCardioZones,
   renderZoneContributionDetail,
   buildSessionSummaryText,
-} from "./workouts.js?v=20260911a";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260911a";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260911a";
-import { renderMetricDetail } from "./health.js?v=20260911a";
-import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260911a";
-import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260911a";
+} from "./workouts.js?v=20260911b";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260911b";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260911b";
+import { renderMetricDetail } from "./health.js?v=20260911b";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260911b";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260911b";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -249,18 +249,23 @@ async function refreshWorkouts(days) {
   const emphasis = await loadTrainingEmphasis(start, end);
   renderTrainingEmphasis($("#trainingEmphasis"), emphasis, (kind) => pushModal("emphasis", kind));
 
-  // Deliberately not scoped to the range selector (days) -- like Freshness
-  // and Ready to Train below, "is this joint currently loaded" is a
-  // standing question, not one that should change shape because someone
-  // has "Last 7 days" selected for an unrelated chart. Fixed at 3 weeks
-  // vs. the 3 weeks before that.
-  const jointLoad = await loadJointLoad();
-  renderJointLoad($("#jointLoad"), jointLoad, (key) => pushModal("joint", key));
-  // Populates the cache renderJointDetail's trend chart reads from --
-  // fetched here (not on modal-open) so the click-through stays instant,
-  // same "load once, read from cache in the drill-down" pattern as the
-  // exercise-contribution cache above it.
+  // Scoped to the range selector (days) on request -- current = the
+  // selected N days, prior = the N days before that, same comparison shape
+  // as the Health tiles' averages.
+  const jointLoad = await loadJointLoad(days);
+  // Populates the cache both renderJointLoad's own trend chart and
+  // renderJointDetail's drill-down chart read from -- fetched here (not on
+  // modal-open) so the click-through stays instant, same "load once, read
+  // from cache in the drill-down" pattern as the exercise-contribution
+  // cache above it.
   await loadJointLoadHistory();
+  renderJointLoad(
+    $("#jointLoad"),
+    jointLoad,
+    days,
+    (key) => pushModal("joint", key),
+    (weekPayload) => pushModal("jointWeek", weekPayload)
+  );
 
   // Deliberately not scoped to the range selector -- freshness is always
   // "as of right now" (last 10 days vs. trailing 70), same reasoning as

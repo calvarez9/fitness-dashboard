@@ -131,6 +131,96 @@ export function renderTrendChart(svg, points, opts = {}) {
   }
 }
 
+const MULTI_SERIES_CLASSES = ["a", "b", "c"]; // maps to --series-1/2/3, in the order given -- never re-cycled per selection
+
+/**
+ * Several lines sharing one y-axis/x-axis (e.g. Low Back/Knees/Shoulders
+ * joint load over time) -- renderTrendChart above only draws one line (or
+ * one high/low band), this is the >1-line-with-real-identity case.
+ *
+ * series: [{ key, label, points: [{x: Date, y: number|null}] }]  up to 3 --
+ *   drawn in the order given (--series-1/2/3), so the caller should pass a
+ *   fixed, stable order rather than one that shifts with what's selected.
+ * opts:
+ *   onPointClick(seriesKey, point)
+ *   legendEl: an element to fill with a colored-swatch legend (a plain
+ *     string legend can't carry per-series color, so this renders into an
+ *     HTML sibling instead of SVG text)
+ *   emptyMessage
+ */
+export function renderMultiTrendChart(svg, series, opts = {}) {
+  svg.innerHTML = "";
+  const W = 700, H = 220;
+  const padL = 44, padR = 12, padT = 14, padB = 24;
+
+  const allPoints = series.flatMap((s) => s.points.filter((p) => p.y != null));
+  if (!allPoints.length) {
+    const fo = el("foreignObject", { x: 0, y: 0, width: W, height: H });
+    const div = document.createElement("div");
+    div.className = "chart-empty";
+    div.textContent = opts.emptyMessage || "No data in this range yet.";
+    fo.appendChild(div);
+    svg.appendChild(fo);
+    if (opts.legendEl) opts.legendEl.innerHTML = "";
+    return;
+  }
+
+  let minY = 0;
+  let maxY = Math.max(...allPoints.map((p) => p.y)) || 1;
+  maxY += maxY * 0.1;
+
+  const allX = series.flatMap((s) => s.points.map((p) => p.x));
+  const minX = new Date(Math.min(...allX.map((d) => d.getTime())));
+  const maxX = new Date(Math.max(...allX.map((d) => d.getTime())));
+  const spanMs = Math.max(1, maxX - minX);
+
+  const x = (d) => padL + ((d.getTime() - minX.getTime()) / spanMs) * (W - padL - padR);
+  const y = (v) => H - padB - ((v - minY) / (maxY - minY)) * (H - padT - padB);
+
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const v = minY + ((maxY - minY) * i) / steps;
+    const gy = y(v);
+    svg.appendChild(el("line", { class: "grid-line", x1: padL, x2: W - padR, y1: gy, y2: gy }));
+    const t = el("text", { x: padL - 8, y: gy + 3, "text-anchor": "end" });
+    t.textContent = Math.round(v).toLocaleString();
+    svg.appendChild(t);
+  }
+  svg.appendChild(el("line", { class: "baseline", x1: padL, x2: W - padR, y1: H - padB, y2: H - padB }));
+
+  const fmtDate = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  [minX, new Date((minX.getTime() + maxX.getTime()) / 2), maxX].forEach((d, i) => {
+    const t = el("text", { x: x(d), y: H - 6, "text-anchor": i === 0 ? "start" : i === 2 ? "end" : "middle" });
+    t.textContent = fmtDate(d);
+    svg.appendChild(t);
+  });
+
+  series.forEach((s, i) => {
+    const cls = MULTI_SERIES_CLASSES[i % MULTI_SERIES_CLASSES.length];
+    const valid = s.points.filter((p) => p.y != null);
+    if (!valid.length) return;
+    const path = valid.map((p, j) => `${j === 0 ? "M" : "L"} ${x(p.x)} ${y(p.y)}`).join(" ");
+    svg.appendChild(el("path", { class: `series-${cls}`, d: path }));
+    valid.forEach((p) => {
+      if (opts.onPointClick) {
+        const hit = el("circle", { class: "dot-hit", cx: x(p.x), cy: y(p.y), r: 10 });
+        hit.addEventListener("click", () => opts.onPointClick(s.key, p));
+        svg.appendChild(hit);
+      }
+      svg.appendChild(el("circle", { class: `dot-${cls}`, cx: x(p.x), cy: y(p.y), r: 2.5 }));
+    });
+  });
+
+  if (opts.legendEl) {
+    opts.legendEl.innerHTML = series
+      .map((s, i) => {
+        const cls = MULTI_SERIES_CLASSES[i % MULTI_SERIES_CLASSES.length];
+        return `<span class="chart-legend-item"><span class="chart-legend-swatch swatch-${cls}"></span>${s.label}</span>`;
+      })
+      .join("");
+  }
+}
+
 /**
  * rows: [{ label, value, sub?, key? }]  sorted by caller, rendered in that order
  * opts: { emptyMessage, onClick(row) }  -- when onClick is given, each row

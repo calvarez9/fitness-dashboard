@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260911a" />
+<link rel="stylesheet" href="css/styles.css?v=20260911b" />
 </head>
 <body>
 <div id="app">
@@ -21,6 +21,7 @@
         <select id="rangeSelect">
           <option value="1">Today</option>
           <option value="7" selected>Last 7 days</option>
+          <option value="14">Last 2 weeks</option>
           <option value="30">Last 30 days</option>
           <option value="90">Last 90 days</option>
           <option value="180">Last 6 months</option>
@@ -118,7 +119,7 @@
         <section class="chart-section">
           <h2>Ask Claude</h2>
           <div class="chart-card">
-            <p class="muted small">Copies your last 5 sessions -- exercises, sets, cardio, plus which joints are running hot and which muscles are still fatigued -- as text ready to paste into a claude.ai chat, so you can actually talk through a recommendation instead of getting one canned reply.</p>
+            <p class="muted small">Copies your last 5 strength sessions -- exercises, sets, plus which joints are running hot and which muscles are still fatigued -- as text ready to paste into a claude.ai chat, so you can actually talk through a recommendation instead of getting one canned reply. Cardio isn't included.</p>
             <div class="claude-handoff-actions">
               <button type="button" class="btn primary small" id="copyClaudeSummaryBtn">Copy summary for Claude</button>
               <a class="btn secondary small" href="https://claude.ai/new" target="_blank" rel="noopener">Open claude.ai ↗</a>
@@ -345,6 +346,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260911a"></script>
+<script type="module" src="js/app.js?v=20260911b"></script>
 </body>
 </html>
