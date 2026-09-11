@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <title>Fitness Dashboard</title>
-<link rel="stylesheet" href="css/styles.css?v=20260903b" />
+<link rel="stylesheet" href="css/styles.css?v=20260911a" />
 </head>
 <body>
 <div id="app">
@@ -114,6 +114,18 @@
 
       <!-- ===== TRAINING ===== -->
       <div class="tab-panel" data-tab="training" hidden>
+
+        <section class="chart-section">
+          <h2>Ask Claude</h2>
+          <div class="chart-card">
+            <p class="muted small">Copies your last 5 sessions -- exercises, sets, cardio, plus which joints are running hot and which muscles are still fatigued -- as text ready to paste into a claude.ai chat, so you can actually talk through a recommendation instead of getting one canned reply.</p>
+            <div class="claude-handoff-actions">
+              <button type="button" class="btn primary small" id="copyClaudeSummaryBtn">Copy summary for Claude</button>
+              <a class="btn secondary small" href="https://claude.ai/new" target="_blank" rel="noopener">Open claude.ai ↗</a>
+            </div>
+            <textarea id="claudeSummaryPreview" class="claude-summary-preview" readonly hidden rows="10" aria-label="Copied training summary"></textarea>
+          </div>
+        </section>
 
         <section class="chart-section">
           <div class="chart-card search-card">
@@ -333,6 +345,6 @@
 
 </div>
 
-<script type="module" src="js/app.js?v=20260903b"></script>
+<script type="module" src="js/app.js?v=20260911a"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260903b";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260903b";
-import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260903b";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260903b";
+import { supabase } from "./supabaseClient.js?v=20260911a";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260911a";
+import { renderBarList, renderProgressChart, renderTrendChart } from "./charts.js?v=20260911a";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260911a";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -2245,4 +2245,183 @@ export function renderJointWeekDetail(container, { jointKey, weekKey }, onOpenWo
     row.addEventListener("click", () => onOpenWorkout(c.workoutId));
     list.appendChild(row);
   });
+}
+
+// ---------- Claude hand-off: plain-text summary of recent sessions ----------
+// Formats the last few sessions into copy/paste-ready text for a manual
+// claude.ai conversation, instead of wiring up a backend API call -- lets
+// you actually converse about the recommendation instead of getting one
+// fire-and-forget response. Deliberately does NOT reuse loadWorkouts()'s
+// module-level `cache` above: that cache backs the visible Workouts list
+// (whatever range is currently selected), and this needs its own fixed
+// "last N sessions" window regardless of that range -- reusing it would
+// silently swap out what the Workouts list shows as a side effect of
+// copying a summary.
+const CLAUDE_SESSION_COUNT = 5;
+const CLAUDE_LOOKBACK_DAYS = 45; // generous cushion to find N sessions even at low training frequency
+const CLAUDE_JOINT_RISK_MENTION_THRESHOLD = 1.5; // same cutoff as Ready to Train's overload flag
+
+function fmtSessionDate(d) {
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+// Groups a workout's sets by exercise, preserving first-appearance order
+// (not alphabetical) so the summary reads in the order they were performed.
+function groupSetsByExercise(sets) {
+  const order = [];
+  const byName = new Map();
+  sets.forEach((s) => {
+    if (!byName.has(s.exercise_name)) {
+      byName.set(s.exercise_name, []);
+      order.push(s.exercise_name);
+    }
+    byName.get(s.exercise_name).push(s);
+  });
+  return order.map((name) => [name, byName.get(name)]);
+}
+
+function formatSetLine(exerciseName, sets) {
+  const metricType = resolveExerciseMeta(exerciseName).metricType || "weighted";
+  const parts = sets.map((s) => {
+    const tag = s.is_warmup ? " (warmup)" : "";
+    if (metricType === "bodyweight") return `${s.reps ?? "?"} reps${tag}`;
+    if (metricType === "isometric") return `${s.duration ?? "?"}s${tag}`;
+    if (metricType === "loadedCarry") return `${s.weight ?? "?"} lb × ${s.duration ?? "?"}s${tag}`;
+    return `${s.weight ?? "?"} lb × ${s.reps ?? "?"}${tag}`;
+  });
+  return `  - ${exerciseName}: ${parts.join(", ")}`;
+}
+
+function formatFitlogSession({ date, workout, sets, segments }) {
+  const lines = [`${fmtSessionDate(date)} — ${workout.name || (workout.type === "cardio" ? "Cardio" : "Strength")}`];
+  if (workout.type === "cardio") {
+    if (segments.length) {
+      segments.forEach((seg) => {
+        const bits = [`${seg.duration_min ?? "?"} min`];
+        if (seg.distance) bits.push(`${seg.distance} mi`);
+        if (seg.avg_hr) bits.push(`avg HR ${seg.avg_hr}`);
+        if (seg.calories) bits.push(`${seg.calories} cal`);
+        lines.push(`  - ${seg.activity_type || "Cardio"}: ${bits.join(", ")}`);
+      });
+    } else {
+      lines.push("  - (no segment detail logged)");
+    }
+  } else if (sets.length) {
+    groupSetsByExercise(sets).forEach(([name, exSets]) => lines.push(formatSetLine(name, exSets)));
+  } else {
+    lines.push("  - (no sets logged)");
+  }
+  if (workout.notes) lines.push(`  Notes: ${workout.notes}`);
+  return lines.join("\n");
+}
+
+function formatGarminSession({ date, activity }) {
+  const mins = activity.duration_seconds ? Math.round(activity.duration_seconds / 60) : null;
+  const miles = activity.distance_meters ? (activity.distance_meters * 0.000621371).toFixed(1) : null;
+  const bits = [`${mins ?? "?"} min`];
+  if (miles) bits.push(`${miles} mi`);
+  if (activity.avg_hr) bits.push(`avg HR ${activity.avg_hr}`);
+  if (activity.calories) bits.push(`${activity.calories} cal`);
+  return `${fmtSessionDate(date)} — ${activity.activity_name || activity.activity_type} (Garmin)\n  - ${bits.join(", ")}`;
+}
+
+// Builds the copy/paste text: last N sessions (FitLog strength/cardio +
+// any Garmin-only cardio not logged in FitLog, merged and sorted like the
+// Workouts list does), plus a short context footer from the same overload/
+// freshness signals Ready to Train already uses -- so the pasted text
+// carries "what's actually going on" and not just a bare set/rep dump.
+export async function buildSessionSummaryText() {
+  const now = new Date();
+  const start = new Date(now.getTime() - CLAUDE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
+  const [workoutsRes, activitiesRes, freshnessRows, jointRisk] = await Promise.all([
+    supabase.from("fitlog_workouts").select("id, date, name, type, notes").gte("date", start.toISOString()).order("date", { ascending: false }),
+    supabase
+      .from("garmin_activities")
+      .select("id, activity_name, activity_type, start_time, duration_seconds, distance_meters, avg_hr, max_hr, calories")
+      .neq("activity_type", "strength_training")
+      .gte("start_time", start.toISOString())
+      .order("start_time", { ascending: false }),
+    loadMuscleFreshness().catch(() => []),
+    loadJointRisk().catch(() => ({})),
+  ]);
+  if (workoutsRes.error) throw workoutsRes.error;
+  const workouts = workoutsRes.data || [];
+
+  const ids = workouts.map((w) => w.id);
+  let sets = [];
+  let segments = [];
+  let linkedActivityIds = new Set();
+  if (ids.length) {
+    const [setsRes, segRes, linksRes] = await Promise.all([
+      supabase
+        .from("fitlog_sets")
+        .select("workout_id, exercise_name, set_index, reps, weight, duration, rpe, is_warmup")
+        .in("workout_id", ids)
+        .order("set_index", { ascending: true }),
+      supabase.from("fitlog_cardio_segments").select("workout_id, activity_type, duration_min, distance, calories, avg_hr, max_hr").in("workout_id", ids),
+      supabase
+        .from("workout_links")
+        .select("garmin_activity_id")
+        .in("fitlog_workout_id", ids)
+        .then(
+          (r) => r,
+          () => ({ data: [] })
+        ),
+    ]);
+    if (setsRes.error) throw setsRes.error;
+    sets = setsRes.data || [];
+    segments = segRes.error ? [] : segRes.data || [];
+    linkedActivityIds = new Set((linksRes.data || []).map((l) => l.garmin_activity_id));
+  }
+
+  const setsByWorkout = new Map();
+  sets.forEach((s) => {
+    if (!setsByWorkout.has(s.workout_id)) setsByWorkout.set(s.workout_id, []);
+    setsByWorkout.get(s.workout_id).push(s);
+  });
+  const segmentsByWorkout = new Map();
+  segments.forEach((s) => {
+    if (!segmentsByWorkout.has(s.workout_id)) segmentsByWorkout.set(s.workout_id, []);
+    segmentsByWorkout.get(s.workout_id).push(s);
+  });
+
+  const fitlogSessions = workouts.map((w) => ({
+    date: new Date(w.date),
+    kind: "fitlog",
+    workout: w,
+    sets: setsByWorkout.get(w.id) || [],
+    segments: segmentsByWorkout.get(w.id) || [],
+  }));
+  const garminSessions = (activitiesRes.data || [])
+    .filter((a) => !linkedActivityIds.has(a.id))
+    .map((a) => ({ date: new Date(a.start_time), kind: "garmin", activity: a }));
+
+  const mostRecent = [...fitlogSessions, ...garminSessions].sort((a, b) => b.date - a.date).slice(0, CLAUDE_SESSION_COUNT);
+  if (!mostRecent.length) return null;
+  const chronological = mostRecent.slice().reverse(); // oldest first, reads as a narrative
+
+  const sessionBlocks = chronological.map((s) => (s.kind === "fitlog" ? formatFitlogSession(s) : formatGarminSession(s))).join("\n\n");
+
+  const overloadedJoints = Object.entries(jointRisk)
+    .filter(([, ratio]) => ratio != null && ratio > CLAUDE_JOINT_RISK_MENTION_THRESHOLD)
+    .map(([key]) => JOINT_LABEL[key] || key);
+  const fatiguedMuscles = [...freshnessRows]
+    .filter((r) => r.recoveryPct < 50)
+    .sort((a, b) => a.recoveryPct - b.recoveryPct)
+    .slice(0, 5)
+    .map((r) => `${r.label} (${r.recoveryPct}% recovered)`);
+
+  const contextLines = [];
+  if (overloadedJoints.length) contextLines.push(`Joints running hot vs. my own 70-day normal (be cautious loading these further): ${overloadedJoints.join(", ")}.`);
+  if (fatiguedMuscles.length) contextLines.push(`Still fatigued: ${fatiguedMuscles.join(", ")}.`);
+
+  return [
+    `Here are my last ${chronological.length} training sessions from my fitness log. Based on this, what should I focus on next -- which muscles or movements need attention -- and do you have a specific workout recommendation?`,
+    "",
+    sessionBlocks,
+    contextLines.length ? "\n" + contextLines.join("\n") : "",
+  ]
+    .filter((s) => s !== "")
+    .join("\n");
 }

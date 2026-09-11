@@ -1,7 +1,7 @@
-import { loadDashboard } from "./dashboard.js?v=20260903b";
-import { supabase } from "./supabaseClient.js?v=20260903b";
-import { importFitLogBackup } from "./importFitLog.js?v=20260903b";
-import { renderBarList, makeCollapsible } from "./charts.js?v=20260903b";
+import { loadDashboard } from "./dashboard.js?v=20260911a";
+import { supabase } from "./supabaseClient.js?v=20260911a";
+import { importFitLogBackup } from "./importFitLog.js?v=20260911a";
+import { renderBarList, makeCollapsible } from "./charts.js?v=20260911a";
 import {
   loadWorkouts,
   renderWorkoutsList,
@@ -35,12 +35,13 @@ import {
   loadOtherTrainingZones,
   renderCardioZones,
   renderZoneContributionDetail,
-} from "./workouts.js?v=20260903b";
-import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260903b";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260903b";
-import { renderMetricDetail } from "./health.js?v=20260903b";
-import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260903b";
-import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260903b";
+  buildSessionSummaryText,
+} from "./workouts.js?v=20260911a";
+import { loadMonth, renderCalendarGrid, renderDayDetail, monthLabel, resetLinksCache } from "./calendar.js?v=20260911a";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260911a";
+import { renderMetricDetail } from "./health.js?v=20260911a";
+import { loadExerciseOverrides, renderLibraryList, renderExerciseForm } from "./library.js?v=20260911a";
+import { MUSCLES, MOVEMENTS, MUSCLE_GROUPS } from "./exerciseLibrary.js?v=20260911a";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -481,6 +482,40 @@ function initDashboardUI() {
     } catch (e) {
       console.error(e);
       toast("Couldn't trigger sync — see console");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+  $("#copyClaudeSummaryBtn").addEventListener("click", async () => {
+    const btn = $("#copyClaudeSummaryBtn");
+    const preview = $("#claudeSummaryPreview");
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = "…";
+    try {
+      const text = await buildSessionSummaryText();
+      if (!text) {
+        toast("No recent sessions to summarize yet");
+        return;
+      }
+      preview.value = text;
+      preview.hidden = false;
+      // Also try the clipboard directly -- a nicety when it works, but the
+      // textarea above is the real fallback (clipboard write can silently
+      // fail depending on browser permissions), so its own success/failure
+      // just changes which toast you get, never whether the text is shown.
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("Copied — paste it into your claude.ai chat");
+      } catch {
+        preview.focus();
+        preview.select();
+        toast("Couldn't auto-copy — select the text below and copy it");
+      }
+    } catch (e) {
+      console.error(e);
+      toast("Couldn't build summary — see console");
     } finally {
       btn.disabled = false;
       btn.textContent = original;
