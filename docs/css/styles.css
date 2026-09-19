@@ -296,7 +296,7 @@ main#content { padding: 16px 16px 60px; }
 .edit-field input, .edit-field select, .edit-field textarea { width: 100%; font-family: var(--font); resize: vertical; }
 .workout-notes-display { font-size: 13px; color: var(--text-secondary); font-style: italic; margin: 0 0 4px; }
 .edit-exercise-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.edit-set-row { display: grid; grid-template-columns: 20px 1fr 1fr 1fr auto auto; gap: 6px; align-items: center; }
+.edit-set-row { display: grid; grid-template-columns: 20px 1fr 1fr 1fr 1fr auto auto; gap: 6px; align-items: center; }
 .edit-set-row input[type="number"] { width: 100%; padding: 6px 8px; font-size: 13px; }
 .edit-set-row .set-marker { text-align: center; color: var(--text-muted); font-size: 12px; }
 .edit-set-row label.warmup-toggle { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-muted); white-space: nowrap; }

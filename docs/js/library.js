@@ -3,8 +3,8 @@
 // primary/secondary muscle model, same override-vs-custom rules), just
 // backed by the exercise_overrides table instead of localStorage, so it's
 // reachable from the dashboard directly rather than only from FitLog.
-import { supabase } from "./supabaseClient.js?v=20260911b";
-import { MUSCLES, MOVEMENTS, MOVEMENT_LABEL, JOINTS, JOINT_LABEL, METRIC_TYPES, getAllExerciseEntries, setExerciseOverrides } from "./exerciseLibrary.js?v=20260911b";
+import { supabase } from "./supabaseClient.js?v=20260919a";
+import { MUSCLES, MOVEMENTS, MOVEMENT_LABEL, JOINTS, JOINT_LABEL, METRIC_TYPES, getAllExerciseEntries, setExerciseOverrides } from "./exerciseLibrary.js?v=20260919a";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -79,14 +79,21 @@ export function renderLibraryList(container, onOpen, filter = {}, sort = "name")
   });
 }
 
+// Alphabetical for this checklist specifically -- a sorted copy, not a
+// mutation of the shared MUSCLES export, which stays in its own grouped
+// order (delt heads together, traps together, etc.) for everywhere else
+// that iterates it (Muscle Volume, freshness, ...).
 function muscleGridHtml(groupId, checkedKeys) {
-  return MUSCLES.map(
-    (m) => `
+  return [...MUSCLES]
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map(
+      (m) => `
     <label class="muscle-check">
       <input type="checkbox" data-muscle="${m.key}" data-group="${groupId}" ${checkedKeys.includes(m.key) ? "checked" : ""}>
       ${esc(m.label)}
     </label>`
-  ).join("");
+    )
+    .join("");
 }
 
 /**

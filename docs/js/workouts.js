@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260911b";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260911b";
-import { renderBarList, renderProgressChart, renderTrendChart, renderMultiTrendChart } from "./charts.js?v=20260911b";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260911b";
+import { supabase } from "./supabaseClient.js?v=20260919a";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260919a";
+import { renderBarList, renderProgressChart, renderTrendChart, renderMultiTrendChart } from "./charts.js?v=20260919a";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260919a";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -19,7 +19,7 @@ function esc(s) {
 export async function loadWorkouts(start, end) {
   const { data: workouts, error: wErr } = await supabase
     .from("fitlog_workouts")
-    .select("id, date, name, type, notes")
+    .select("id, date, name, type, notes, gym_location")
     .gte("date", start.toISOString())
     .lte("date", end.toISOString())
     .order("date", { ascending: false });
@@ -33,7 +33,7 @@ export async function loadWorkouts(start, end) {
     const [setsRes, segRes, linksRes] = await Promise.all([
       supabase
         .from("fitlog_sets")
-        .select("workout_id, exercise_name, set_index, reps, weight, duration, rpe, is_warmup, done")
+        .select("workout_id, exercise_name, set_index, reps, weight, duration, rpe, rir, is_warmup, done")
         .in("workout_id", ids)
         .order("set_index", { ascending: true }),
       supabase
@@ -300,7 +300,8 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
   });
   const header = document.createElement("div");
   header.className = "workout-detail-header";
-  header.innerHTML = `<h4>${esc(workout.name || "Workout")}</h4><p class="muted small">${esc(dateLabel)}</p>`;
+  const locationSuffix = workout.gym_location ? ` · ${esc(workout.gym_location)}` : "";
+  header.innerHTML = `<h4>${esc(workout.name || "Workout")}</h4><p class="muted small">${esc(dateLabel)}${locationSuffix}</p>`;
   container.appendChild(header);
 
   const actions = document.createElement("div");
@@ -428,7 +429,10 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
           if (s.reps != null) parts.push(`${s.reps} reps`);
           if (s.duration != null) parts.push(`${s.duration}s`);
         }
+        // Never both -- FitLog's own logging UI treats these as mutually
+        // exclusive per set and never converts between them.
         if (s.rpe != null) parts.push(`RPE ${s.rpe}`);
+        else if (s.rir != null) parts.push(`${s.rir} RIR`);
         const label = parts.length ? parts.join(" × ") : "—";
         return `<div class="set-row${s.is_warmup ? " warmup" : ""}"><span class="set-marker">${s.is_warmup ? "W" : "·"}</span><span>${esc(label)}</span></div>`;
       })
@@ -444,7 +448,7 @@ export function renderWorkoutDetailData(container, workout, sets, segments, link
 async function saveWorkoutEdits(workout, state) {
   const { error: wErr } = await supabase
     .from("fitlog_workouts")
-    .update({ name: state.name, date: state.date, notes: state.notes || null })
+    .update({ name: state.name, date: state.date, notes: state.notes || null, gym_location: state.gymLocation || null })
     .eq("id", workout.id);
   if (wErr) throw wErr;
 
@@ -478,6 +482,7 @@ async function saveWorkoutEdits(workout, state) {
           weight: s.weight,
           duration: s.duration,
           rpe: s.rpe,
+          rir: s.rir,
           is_warmup: !!s.isWarmup,
           done: true,
         });
@@ -527,7 +532,14 @@ function editSetValueFieldsHtml(metricType, s) {
 function renderWorkoutEditForm(container, workout, sets, segments, linkedActivity, onSaved) {
   container.innerHTML = "";
 
-  const state = { name: workout.name || "", date: workout.date, notes: workout.notes || "", exercises: [], segments: [] };
+  const state = {
+    name: workout.name || "",
+    date: workout.date,
+    notes: workout.notes || "",
+    gymLocation: workout.gym_location || "",
+    exercises: [],
+    segments: [],
+  };
 
   if (workout.type === "cardio") {
     state.segments = segments.map((seg) => ({
@@ -559,7 +571,7 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
       metricType: resolveExerciseMeta(name).metricType || "weighted",
       sets: [...byExercise.get(name)]
         .sort((a, b) => a.set_index - b.set_index)
-        .map((s) => ({ reps: s.reps, weight: s.weight, duration: s.duration, rpe: s.rpe, isWarmup: !!s.is_warmup })),
+        .map((s) => ({ reps: s.reps, weight: s.weight, duration: s.duration, rpe: s.rpe, rir: s.rir, isWarmup: !!s.is_warmup })),
     }));
   }
 
@@ -581,6 +593,19 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
     if (e.target.value) state.date = new Date(e.target.value).toISOString();
   });
   container.appendChild(dateField);
+
+  // Fixes an equipment-driven jump (a different gym's cable stack) reading
+  // as real progress or regression -- includes the workout's current value
+  // even if it's not one of the two known gyms, so an edit never silently
+  // discards it.
+  const locationField = document.createElement("div");
+  locationField.className = "edit-field";
+  const locationOptions = [...new Set([state.gymLocation, "Acropolis", "Chalets"].filter(Boolean))];
+  locationField.innerHTML = `<label>Gym</label><select><option value="">—</option>${locationOptions
+    .map((loc) => `<option value="${esc(loc)}" ${loc === state.gymLocation ? "selected" : ""}>${esc(loc)}</option>`)
+    .join("")}</select>`;
+  locationField.querySelector("select").addEventListener("change", (e) => (state.gymLocation = e.target.value));
+  container.appendChild(locationField);
 
   const notesField = document.createElement("div");
   notesField.className = "edit-field";
@@ -625,12 +650,19 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
           <span class="set-marker">${setIdx + 1}</span>
           ${editSetValueFieldsHtml(ex.metricType, s)}
           <input type="number" step="any" placeholder="RPE" value="${s.rpe ?? ""}" class="ex-rpe" />
+          <input type="number" step="any" placeholder="RIR" value="${s.rir ?? ""}" class="ex-rir" />
           <label class="warmup-toggle"><input type="checkbox" ${s.isWarmup ? "checked" : ""} /> W</label>
         `;
         row.querySelector(".ex-weight")?.addEventListener("input", (e) => (s.weight = numOrNull(e.target.value)));
         row.querySelector(".ex-reps")?.addEventListener("input", (e) => (s.reps = numOrNull(e.target.value)));
         row.querySelector(".ex-duration")?.addEventListener("input", (e) => (s.duration = numOrNull(e.target.value)));
+        // Not mutually-exclusive-enforced here the way FitLog's own picker
+        // is (this edit screen just exposes both as plain fields) -- if
+        // someone fills in both, both get saved as entered rather than
+        // silently clearing one, since that's simpler and this is an
+        // occasional-edit surface, not the primary logging flow.
         row.querySelector(".ex-rpe").addEventListener("input", (e) => (s.rpe = numOrNull(e.target.value)));
+        row.querySelector(".ex-rir").addEventListener("input", (e) => (s.rir = numOrNull(e.target.value)));
         row.querySelector('input[type="checkbox"]').addEventListener("change", (e) => (s.isWarmup = e.target.checked));
 
         const removeSetBtn = document.createElement("button");
@@ -652,7 +684,7 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
       addSetBtn.textContent = "+ Add set";
       addSetBtn.addEventListener("click", () => {
         const last = ex.sets[ex.sets.length - 1];
-        ex.sets.push({ reps: last?.reps ?? null, weight: last?.weight ?? null, duration: last?.duration ?? null, rpe: null, isWarmup: false });
+        ex.sets.push({ reps: last?.reps ?? null, weight: last?.weight ?? null, duration: last?.duration ?? null, rpe: null, rir: null, isWarmup: false });
         renderBody();
       });
       block.appendChild(addSetBtn);
@@ -672,7 +704,7 @@ function renderWorkoutEditForm(container, workout, sets, segments, linkedActivit
       state.exercises.push({
         name,
         metricType: resolveExerciseMeta(name).metricType || "weighted",
-        sets: [{ reps: null, weight: null, duration: null, rpe: null, isWarmup: false }],
+        sets: [{ reps: null, weight: null, duration: null, rpe: null, rir: null, isWarmup: false }],
       });
       renderBody();
     });
@@ -2279,6 +2311,12 @@ function fmtSessionDate(d) {
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
+// Local calendar date as "YYYY-MM-DD", matching the plain `date` columns
+// on garmin_daily_stats/daily_log (no time component to compare against).
+function isoDateOnly(d) {
+  return d.toISOString().slice(0, 10);
+}
+
 // Groups a workout's sets by exercise, preserving first-appearance order
 // (not alphabetical) so the summary reads in the order they were performed.
 function groupSetsByExercise(sets) {
@@ -2297,11 +2335,17 @@ function groupSetsByExercise(sets) {
 function formatSetLine(exerciseName, sets) {
   const metricType = resolveExerciseMeta(exerciseName).metricType || "weighted";
   const parts = sets.map((s) => {
-    const tag = s.is_warmup ? " (warmup)" : "";
-    if (metricType === "bodyweight") return `${s.reps ?? "?"} reps${tag}`;
-    if (metricType === "isometric") return `${s.duration ?? "?"}s${tag}`;
-    if (metricType === "loadedCarry") return `${s.weight ?? "?"} lb × ${s.duration ?? "?"}s${tag}`;
-    return `${s.weight ?? "?"} lb × ${s.reps ?? "?"}${tag}`;
+    // Whichever was actually logged, labeled -- never converts one into
+    // the other, and never shows both (FitLog's own picker treats them as
+    // mutually exclusive per set).
+    const effort = s.rpe != null ? ` (RPE ${s.rpe})` : s.rir != null ? ` (${s.rir} RIR)` : "";
+    const warmup = s.is_warmup ? " (warmup)" : "";
+    let base;
+    if (metricType === "bodyweight") base = `${s.reps ?? "?"} reps`;
+    else if (metricType === "isometric") base = `${s.duration ?? "?"}s`;
+    else if (metricType === "loadedCarry") base = `${s.weight ?? "?"} lb × ${s.duration ?? "?"}s`;
+    else base = `${s.weight ?? "?"} lb × ${s.reps ?? "?"}`;
+    return `${base}${effort}${warmup}`;
   });
   return `  - ${exerciseName}: ${parts.join(", ")}`;
 }
@@ -2310,6 +2354,24 @@ function formatSetLine(exerciseName, sets) {
 // query excludes type "cardio"), so this only ever formats sets.
 function formatFitlogSession({ date, workout, sets }) {
   const lines = [`${fmtSessionDate(date)} — ${workout.name || "Strength"}`];
+
+  // Session-level context -- each piece omitted individually when absent
+  // rather than printed as an empty value (per-session back/effort/load/
+  // location logging is all optional, so most older sessions have none of
+  // this and shouldn't show a line full of blanks).
+  const meta = [];
+  if (workout.back_pre != null) meta.push(`back pre ${workout.back_pre}`);
+  if (workout.back_post != null) meta.push(`back post ${workout.back_post}`);
+  if (workout.session_rpe != null) meta.push(`session RPE ${workout.session_rpe}`);
+  // session_load = session_rpe * duration_min, computed here rather than
+  // stored -- same reasoning as FitLog's own History card: session_rpe
+  // stays editable after the fact, so a stored product would go stale.
+  if (workout.session_rpe != null && workout.duration_min != null) {
+    meta.push(`load ${Math.round(workout.session_rpe * workout.duration_min)}`);
+  }
+  if (workout.gym_location) meta.push(workout.gym_location);
+  if (meta.length) lines.push(`  (${meta.join(" · ")})`);
+
   if (sets.length) {
     groupSetsByExercise(sets).forEach(([name, exSets]) => lines.push(formatSetLine(name, exSets)));
   } else {
@@ -2335,7 +2397,7 @@ export async function buildSessionSummaryText() {
   const [workoutsRes, freshnessRows, jointRisk] = await Promise.all([
     supabase
       .from("fitlog_workouts")
-      .select("id, date, name, type, notes")
+      .select("id, date, name, type, notes, back_pre, back_post, session_rpe, gym_location, duration_min")
       .neq("type", "cardio")
       .gte("date", start.toISOString())
       .order("date", { ascending: false }),
@@ -2350,7 +2412,7 @@ export async function buildSessionSummaryText() {
   if (ids.length) {
     const { data, error } = await supabase
       .from("fitlog_sets")
-      .select("workout_id, exercise_name, set_index, reps, weight, duration, rpe, is_warmup")
+      .select("workout_id, exercise_name, set_index, reps, weight, duration, rpe, rir, is_warmup")
       .in("workout_id", ids)
       .order("set_index", { ascending: true });
     if (error) throw error;
@@ -2369,6 +2431,82 @@ export async function buildSessionSummaryText() {
 
   const sessionBlocks = chronological.map((s) => formatFitlogSession(s)).join("\n\n");
 
+  // ---- Header block: quick standing context ahead of the session list ----
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const twentyEightDaysAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
+  const sessionsLast7 = workouts.filter((w) => new Date(w.date) >= sevenDaysAgo).length;
+  const sessionsLast28 = workouts.filter((w) => new Date(w.date) >= twentyEightDaysAgo).length;
+
+  // workouts is already sorted desc and covers CLAUDE_LOOKBACK_DAYS (45) --
+  // only falls back to a fresh query if that whole window came up empty
+  // (an actual long break, not just "off by a few days").
+  let lastSessionDate = workouts[0] ? new Date(workouts[0].date) : null;
+  if (!lastSessionDate) {
+    const { data } = await supabase.from("fitlog_workouts").select("date").neq("type", "cardio").order("date", { ascending: false }).limit(1);
+    lastSessionDate = data?.[0] ? new Date(data[0].date) : null;
+  }
+  const daysSinceLastSession = lastSessionDate ? Math.floor((now - lastSessionDate) / (24 * 60 * 60 * 1000)) : null;
+
+  // Steps/sleep -- isolated and defensive the same way weight_kg/
+  // recovery_time_minutes are elsewhere: a Garmin sync gap here shouldn't
+  // take down the rest of the export. "Last 3 days/nights" means the 3
+  // most recent days strictly before today, not today's possibly-partial
+  // reading -- the same 3 rows back both figures.
+  let stepsYesterday = null;
+  let stepsLast3Total = null;
+  let sleepNights = [];
+  try {
+    const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const { data, error } = await supabase
+      .from("garmin_daily_stats")
+      .select("date, steps, sleep_seconds")
+      .gte("date", isoDateOnly(cutoff))
+      .order("date", { ascending: false });
+    if (error) throw error;
+    const rows = data || [];
+    const yesterdayKey = isoDateOnly(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    stepsYesterday = rows.find((r) => r.date === yesterdayKey)?.steps ?? null;
+    const todayKey = isoDateOnly(now);
+    const priorRows = rows.filter((r) => r.date < todayKey).slice(0, 3);
+    stepsLast3Total = priorRows.length ? priorRows.reduce((sum, r) => sum + (r.steps || 0), 0) : null;
+    sleepNights = priorRows.filter((r) => r.sleep_seconds != null).map((r) => Math.round((r.sleep_seconds / 3600) * 10) / 10);
+  } catch (e) {
+    console.warn("garmin_daily_stats unavailable for Ask Claude header:", e.message);
+  }
+
+  // daily_log is the newest table (schema/019) -- same isolation as above,
+  // just in case.
+  let backRatings = [];
+  try {
+    const { data, error } = await supabase
+      .from("daily_log")
+      .select("date, back_morning")
+      .gte("date", isoDateOnly(sevenDaysAgo))
+      .not("back_morning", "is", null)
+      .order("date", { ascending: true });
+    if (error) throw error;
+    backRatings = data || [];
+  } catch (e) {
+    console.warn("daily_log unavailable for Ask Claude header:", e.message);
+  }
+
+  const headerLines = [
+    `Today: ${now.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`,
+  ];
+  if (daysSinceLastSession != null) headerLines.push(`Days since last strength session: ${daysSinceLastSession}`);
+  headerLines.push(`Sessions: ${sessionsLast7} in last 7 days, ${sessionsLast28} in last 28 days`);
+  if (stepsYesterday != null || stepsLast3Total != null) {
+    const bits = [];
+    if (stepsYesterday != null) bits.push(`yesterday ${stepsYesterday.toLocaleString()}`);
+    if (stepsLast3Total != null) bits.push(`last 3 days ${stepsLast3Total.toLocaleString()}`);
+    headerLines.push(`Steps: ${bits.join(", ")}`);
+  }
+  if (sleepNights.length) headerLines.push(`Sleep: last ${sleepNights.length} nights ${sleepNights.map((h) => `${h}h`).join(", ")}`);
+  if (backRatings.length) {
+    const ratingsStr = backRatings.map((r) => `${fmtSessionDate(new Date(`${r.date}T12:00:00`))}: ${r.back_morning}`).join(", ");
+    headerLines.push(`Morning back ratings (last 7 days): ${ratingsStr}`);
+  }
+
   const overloadedJoints = Object.entries(jointRisk)
     .filter(([, ratio]) => ratio != null && ratio > CLAUDE_JOINT_RISK_MENTION_THRESHOLD)
     .map(([key]) => JOINT_LABEL[key] || key);
@@ -2384,6 +2522,8 @@ export async function buildSessionSummaryText() {
 
   return [
     `Here are my last ${chronological.length} strength training sessions from my fitness log. Based on this, what should I focus on next -- which muscles or movements need attention -- and do you have a specific workout recommendation?`,
+    "",
+    headerLines.join("\n"),
     "",
     sessionBlocks,
     contextLines.length ? "\n" + contextLines.join("\n") : "",
