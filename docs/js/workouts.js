@@ -1,8 +1,8 @@
 // ---------- Individual workouts + exercise/movement/muscle stats ----------
-import { supabase } from "./supabaseClient.js?v=20260919a";
-import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260919a";
-import { renderBarList, renderProgressChart, renderTrendChart, renderMultiTrendChart } from "./charts.js?v=20260919a";
-import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260919a";
+import { supabase } from "./supabaseClient.js?v=20260919b";
+import { resolveExerciseMeta, getAllExerciseEntries, MUSCLES, MUSCLE_LABEL, MUSCLE_GROUPS, MOVEMENTS_IN_VOLUME, MOVEMENT_LABEL, MOVEMENT_GROUPS, JOINTS, JOINT_LABEL } from "./exerciseLibrary.js?v=20260919b";
+import { renderBarList, renderProgressChart, renderTrendChart, renderMultiTrendChart } from "./charts.js?v=20260919b";
+import { renderBodyMaps, applyVolumeColors } from "./bodyMap.js?v=20260919b";
 
 // Standard Epley estimated-1RM formula, matching FitLog's own progress view.
 function epley1RM(weight, reps) {
@@ -2449,9 +2449,12 @@ export async function buildSessionSummaryText() {
 
   // Steps/sleep -- isolated and defensive the same way weight_kg/
   // recovery_time_minutes are elsewhere: a Garmin sync gap here shouldn't
-  // take down the rest of the export. "Last 3 days/nights" means the 3
-  // most recent days strictly before today, not today's possibly-partial
-  // reading -- the same 3 rows back both figures.
+  // take down the rest of the export. Steps and sleep are NOT the same 3
+  // rows despite both being "last 3" -- steps accumulate through the day,
+  // so today's row is a partial number and gets excluded; sleep for last
+  // night is already a finished figure that Garmin assigns to the day you
+  // woke up (today), not the day you fell asleep, so excluding today would
+  // wrongly drop the most recent, most relevant night.
   let stepsYesterday = null;
   let stepsLast3Total = null;
   let sleepNights = [];
@@ -2467,9 +2470,10 @@ export async function buildSessionSummaryText() {
     const yesterdayKey = isoDateOnly(new Date(now.getTime() - 24 * 60 * 60 * 1000));
     stepsYesterday = rows.find((r) => r.date === yesterdayKey)?.steps ?? null;
     const todayKey = isoDateOnly(now);
-    const priorRows = rows.filter((r) => r.date < todayKey).slice(0, 3);
-    stepsLast3Total = priorRows.length ? priorRows.reduce((sum, r) => sum + (r.steps || 0), 0) : null;
-    sleepNights = priorRows.filter((r) => r.sleep_seconds != null).map((r) => Math.round((r.sleep_seconds / 3600) * 10) / 10);
+    const priorStepRows = rows.filter((r) => r.date < todayKey).slice(0, 3);
+    stepsLast3Total = priorStepRows.length ? priorStepRows.reduce((sum, r) => sum + (r.steps || 0), 0) : null;
+    const sleepRows = rows.filter((r) => r.sleep_seconds != null).slice(0, 3);
+    sleepNights = sleepRows.map((r) => Math.round((r.sleep_seconds / 3600) * 10) / 10);
   } catch (e) {
     console.warn("garmin_daily_stats unavailable for Ask Claude header:", e.message);
   }
